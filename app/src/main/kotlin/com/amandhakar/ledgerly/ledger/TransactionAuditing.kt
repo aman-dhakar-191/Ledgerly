@@ -57,6 +57,7 @@ suspend fun writeTransactionEditAudit(
  * via the archive it came from — `RawSms.matchedRuleId`, not `Transaction` itself, since that's
  * where a match is actually recorded (Tier 2 suggestions never set it).
  */
+@Suppress("ReturnCount") // guard-clause style is clearer than nesting for this lookup chain
 suspend fun maybeIncrementRuleCorrection(
     rawSmsDao: RawSmsDao,
     parserRuleDao: ParserRuleDao,

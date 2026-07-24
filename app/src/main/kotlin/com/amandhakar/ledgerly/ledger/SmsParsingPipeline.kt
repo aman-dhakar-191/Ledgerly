@@ -47,6 +47,7 @@ import com.amandhakar.ledgerly.parser.Direction as ParserDirection
  * `is_internal` (Task 1.12) is never set here: the allowlist is only ever populated by explicit
  * user confirmation from the review inbox, never inferred at ingestion.
  */
+@Suppress("LongParameterList") // one dependency per DAO/collaborator this pipeline actually needs
 class SmsParsingPipeline @Inject constructor(
     private val rawSmsDao: RawSmsDao,
     private val senderRegistryDao: SenderRegistryDao,
@@ -145,7 +146,7 @@ class SmsParsingPipeline @Inject constructor(
      * per docs/parser.md ("no match -> PENDING_REVIEW; do NOT fall to generic" is about the regex
      * not matching at all, not about a balance disagreement).
      */
-    @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this validation-heavy path
+    @Suppress("ReturnCount", "CyclomaticComplexMethod") // guard-clause style is clearer than nesting for this validation-heavy path
     private suspend fun applyRule(sms: RawSms, institution: String, sender: SenderRegistry, rule: ParserRule): Boolean {
         val pattern = runCatching { Regex(rule.pattern) }.getOrNull() ?: return false
         val match = matchWithTimeout(pattern, sms.body)
