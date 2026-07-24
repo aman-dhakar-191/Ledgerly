@@ -3,6 +3,49 @@
 No bank formats are hardcoded. Rules are **data**, stored in Room, learned at
 runtime from the user's own messages.
 
+**Read `docs/corpus-findings.md` alongside this file.** It records observations
+from the real inbox and overrides general assumptions here.
+
+---
+
+## Sender normalisation — before anything else
+
+Sender IDs identify the telecom route, not the bank. `AD-ICICIT-S`,
+`JX-ICICIT-S` and `VM-ICICIT-S` are all ICICI with identical message formats.
+
+```
+normalizeSender(raw) = raw.removePrefix(/^[A-Z]{2}-/).removeSuffix(/-[A-Z]$/)
+```
+
+Rules key on the resulting **institution**, never the raw sender. `RawSms` keeps
+the raw value for provenance.
+
+---
+
+## Non-transaction pre-filter — hardcoded, runs before rule matching
+
+These classes contain a plausible amount, merchant and account but represent no
+money movement. A learned rule would happily parse them as transactions.
+
+| Class | Discriminator | Outcome |
+|---|---|---|
+| OTP | `One-Time Password`, `OTP` | never a transaction |
+| DECLINED | `declined due to`, `is declined, as` | never a transaction |
+| SI_UPCOMING | `is due by`, `to be debited from` | future intent -> Phase 4 |
+| SI_FAILED | `could not be processed` | never a transaction |
+| AUTOPAY_SCHEDULED | `is scheduled on`, `For the upcoming mandate set for` | future intent -> Phase 4 |
+| COLLECT_REQUEST | `has requested money from you` | a request, not a debit |
+| PROMO | no amount, or marketing sender class | ignored |
+
+`SI_PROCESSED` (`successfully processed payment of`) **is** a real transaction —
+do not filter it.
+
+The discriminator usually appears *after* the amount, so the filter must examine
+the whole body. Stopping at the first amount match misclassifies all of these.
+
+This filter is hardcoded and not user-editable. It is the main defence against
+the highest-volume false positives in the corpus.
+
 ---
 
 ## The ladder
@@ -30,13 +73,18 @@ message waiting in review. Failure must be loud.
 ```
 SMS arrives
   |
-  +- sender in SenderRegistry?
-  |     no  -> prompt: "New sender {id}. Bank / Card / OTP / Spam?"
+  +- normalizeSender -> institution
+  |
+  +- non-transaction pre-filter (OTP, declined, SI upcoming/failed, autopay)
+  |     match -> store RawSms with that class, stop. Never a transaction.
+  |
+  +- institution in SenderRegistry?
+  |     no  -> prompt: "New institution {id}. Bank / Card / OTP / Spam?"
   |            untrusted -> store RawSms, mark IGNORED, stop
   |
-  +- active ParserRule for sender?
+  +- active ParserRule for institution?
   |     yes -> match by priority desc
-  |             match    -> reconcile -> CONFIRMED
+  |             match    -> reconcile (if balance present) -> CONFIRMED
   |             no match -> PENDING_REVIEW (do NOT fall to generic)
   |
   +- no rules yet
@@ -55,13 +103,14 @@ silently; low-confidence fields are highlighted for user attention.
 
 | Field | Signals |
 |---|---|
-| amount | `Rs.` / `INR` / `₹` followed by number with optional commas/decimals |
+| amount | `Rs.` / `Rs` / `Rs{n}` (**no space**, axio) / `INR` / `USD` / `₹` + number with optional commas. **0, 1 or 2 decimal places** (`by 2`, `by 50.0`, `by 210.25`), bare leading decimal (`Rs .00`), and trailing `/-` (EPFO). |
+| balance_after | `Avl Bal`, `Avb Bal`, `Bal`, `Available Balance`, `Avbl Bal`, `Updated Balance is`, `Updated balance:` + amount. **`Avl Limit` is NOT a balance** — it is remaining credit on a card; `outstanding = limit - available`. |
+| currency | `INR`, `Rs`, `₹` -> INR; `USD` -> USD. Required — the corpus contains USD. |
 | direction | debited, withdrawn, spent, paid, sent -> DEBIT; credited, received, deposited, refund -> CREDIT |
-| account last4 | `A/c`, `Ac`, `Account`, `Card` + `XX1234` / `xx1234` / `*1234` |
-| balance_after | `Avl Bal`, `Available Balance`, `Bal:`, `Avbl Bal` + amount |
-| merchant | text after `at`, `to`, `towards`, `VPA`, trailing before `on {date}` |
-| occurred_at | `dd-MM-yy`, `dd/MM/yyyy`, `dd-MMM-yy`; absent -> SMS received_at |
-| ref | `Ref`, `RRN`, `UPI Ref`, `Txn ID` |
+| account last4 | `A/c`, `Acct`, `Card`, `Account` + masked digits in any of these forms: `XX9001`, `XX924`, `4xxx5001`, `XXXXX583840`, `XXXXXXXX3840`, or bare `6001`. **Extract the trailing digit run and match on it.** |
+| merchant | after `at`, `to`, `towards`, `for UPI-{ref}-`, `Merchant`, `trf to`, or before `credited` |
+| occurredAt | `dd-MMM-yy`, `dd-MMM-YY`, `dd/MM/yyyy`, `dd-MM-yy`; absent -> `received_at` |
+| reference | `UPI-`, `UPI:`, `Ref`, `RRN`, `UTR`, `Txn ID`, `IMPS Ref no`, `Mandate ID` |
 
 Output is always `source = SMS_GENERIC`, `status = PENDING_REVIEW`. No exceptions.
 

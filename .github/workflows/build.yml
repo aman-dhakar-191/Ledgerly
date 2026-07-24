@@ -95,8 +95,10 @@ jobs:
         run: |
           VERSION_NAME=$(grep -m1 'val appVersionName' app/build.gradle.kts | sed -E 's/.*"(.*)".*/\1/')
           VERSION_CODE=$(grep -m1 'val appVersionCode' app/build.gradle.kts | sed -E 's/.*= *([0-9]+).*/\1/')
+          SCHEMA_VERSION=$(grep -m1 'const val SCHEMA_VERSION' core/database/src/main/kotlin/com/amandhakar/ledgerly/database/LedgerlyDatabase.kt | sed -E 's/.*= *([0-9]+).*/\1/')
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "schema_version=$SCHEMA_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Rename debug APK
         if: steps.release_secrets.outputs.present != 'true'
@@ -142,3 +144,4 @@ jobs:
           generate_release_notes: true
           body: |
             versionCode: ${{ steps.app_version.outputs.version_code }}
+            schemaVersion: ${{ steps.app_version.outputs.schema_version }}

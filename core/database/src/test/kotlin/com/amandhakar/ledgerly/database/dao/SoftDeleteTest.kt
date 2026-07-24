@@ -58,7 +58,7 @@ class SoftDeleteTest {
 
     @Test
     fun `SenderRegistry soft delete excludes from observeAll and byId`() = runTest {
-        val sender = SenderRegistry("VM-HDFCBK", "HDFC", SenderType.BANK, true, null, now, now, null)
+        val sender = SenderRegistry("VM-HDFCBK", "HDFCBK", "HDFC", SenderType.BANK, true, null, now, now, null)
         db.senderRegistryDao().insert(sender)
         db.senderRegistryDao().softDelete("VM-HDFCBK", now)
 
@@ -67,10 +67,12 @@ class SoftDeleteTest {
     }
 
     @Test
-    fun `ParserRule soft delete excludes from observeAll, byId, and activeForSender`() = runTest {
-        db.senderRegistryDao().insert(SenderRegistry("VM-HDFCBK", "HDFC", SenderType.BANK, true, null, now, now, null))
+    fun `ParserRule soft delete excludes from observeAll, byId, and activeForInstitution`() = runTest {
+        db.senderRegistryDao().insert(
+            SenderRegistry("VM-HDFCBK", "HDFCBK", "HDFC", SenderType.BANK, true, null, now, now, null),
+        )
         val rule = ParserRule(
-            "rule-1", "VM-HDFCBK", "Rs\\.(\\d+)", """{"1":"amount"}""", ParserTxnType.DEBIT,
+            "rule-1", "HDFCBK", "Rs\\.(\\d+)", """{"1":"amount"}""", ParserTxnType.DEBIT,
             10, 0.9f, true, "sms-1", 0, 0, 1, now, now, null,
         )
         db.parserRuleDao().insert(rule)
@@ -78,7 +80,7 @@ class SoftDeleteTest {
 
         assertThat(db.parserRuleDao().observeAll().first()).isEmpty()
         assertThat(db.parserRuleDao().getById("rule-1")).isNull()
-        assertThat(db.parserRuleDao().getActiveForSender("VM-HDFCBK")).isEmpty()
+        assertThat(db.parserRuleDao().getActiveForInstitution("HDFCBK")).isEmpty()
     }
 
     @Test

@@ -1,0 +1,34 @@
+plugins {
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.detekt)
+}
+
+kotlin {
+    // See core/model/build.gradle.kts for why this is jvmTarget, not jvmToolchain(21).
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+detekt {
+    config.setFrom(file("$rootDir/detekt.yml"))
+    buildUponDefaultConfig = true
+}
+
+dependencies {
+    implementation(project(":core:model"))
+
+    testImplementation(libs.junit5.api)
+    testRuntimeOnly(libs.junit5.engine)
+    testImplementation(libs.junit5.params)
+    testImplementation(libs.truth)
+}
+
+tasks.test {
+    useJUnitPlatform()
+}

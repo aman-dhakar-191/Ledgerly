@@ -20,3 +20,6 @@ complexity:
     # TypeConverters registration, rather than scattering them across files.
     thresholdInClasses: 25
     thresholdInInterfaces: 15
+    # GenericExtractor is one field-extraction helper per field (Task 1.6) — splitting it into
+    # several objects would scatter one cohesive algorithm across files for no benefit.
+    thresholdInObjects: 15

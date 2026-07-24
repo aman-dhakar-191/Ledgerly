@@ -21,28 +21,39 @@ Immutable. Never edited, never deleted.
 | received_at | Long | epoch millis |
 | subscription_id | Int? | dual SIM |
 | dedupe_hash | String | SHA-256(sender + received_at + body), unique index |
+| institution | String | normalised sender |
 | parse_status | Enum | UNPROCESSED, PARSED, REVIEW, IGNORED, FAILED |
+| parse_class | Enum | TRANSACTION, OTP, DECLINED, SI_UPCOMING, SI_FAILED, AUTOPAY_SCHEDULED, PROMO, UNKNOWN |
 | matched_rule_id | String? | |
+
+`parse_class` is set by the hardcoded pre-filter in `docs/parser.md`. Anything
+other than `TRANSACTION` never reaches the rule engine. OTP and declined
+messages carry amounts and merchants and would otherwise parse as real spends.
 
 ### SenderRegistry — Phase 1
 
 | Field | Type | Notes |
 |---|---|---|
-| sender_id | String | PK |
+| sender_id | String | PK, raw e.g. `AD-ICICIT-S` |
+| institution | String | normalised e.g. `ICICIT` — **rules key on this** |
 | label | String | user-assigned |
 | type | Enum | BANK, CARD, OTP, PROMO, SPAM, UNKNOWN |
 | trusted | Boolean | only trusted senders are parsed |
 | account_id | String? | default account for this sender |
+
+Sender IDs identify the telecom route, not the bank: `AD-ICICIT-S`,
+`JX-ICICIT-S` and `VM-ICICIT-S` all carry identical ICICI formats. Trust and
+classification apply at the institution level. See `docs/corpus-findings.md`.
 
 ### ParserRule — Phase 1
 
 | Field | Type | Notes |
 |---|---|---|
 | id | String | |
-| sender_id | String | FK |
+| institution | String | **not sender_id** — a rule learned from one route must fire on all |
 | pattern | String | regex |
 | field_map | String | JSON: capture group -> field name |
-| txn_type | Enum | DEBIT, CREDIT, CARD_SPEND, CARD_PAYMENT, STATEMENT, TRANSFER |
+| txn_type | Enum | DEBIT, CREDIT, CARD_SPEND, CARD_PAYMENT, STATEMENT, TRANSFER, SI_PROCESSED, REFUND, EMI_CONVERSION |
 | priority | Int | higher wins on conflict |
 | confidence | Float | 0.0–1.0 |
 | active | Boolean | |
@@ -70,11 +81,27 @@ Immutable. Never edited, never deleted.
 |---|---|---|
 | id | String | |
 | name | String | |
-| type | Enum | SAVINGS, CURRENT, CREDIT_CARD, CASH, WALLET, LOAN |
+| type | Enum | SAVINGS, CURRENT, CREDIT_CARD, CASH, WALLET, LOAN, BNPL |
+
+Types observed in the corpus beyond bank accounts and cards:
+- `WALLET` — Amazon Pay, Zomato Money. Funded by a bank debit; the top-up is a
+  transfer and the wallet debit is the real expense. Ignoring the wallet
+  double-counts. Some wallet formats carry a balance and are reconcilable.
+- `BNPL` — axio (Amazon Pay Later). Structurally a credit card: individual spends
+  SMS, a monthly bill, and a settlement debit from the bank to `CAPITALFLOAT`.
+  Spends carry no merchant name, so they arrive uncategorised.
+- `CASH` — destination for ATM withdrawals. Spending from it is invisible; this
+  is the one genuine blind spot.
 | last4 | String? | |
 | currency | String | ISO 4217, default INR |
 | current_balance | Long | paise; negative for liabilities |
-| balance_as_of | Long | timestamp of last reconciliation |
+| balance_as_of | Long | timestamp of last **verified** balance, i.e. last reconciled message |
+
+Reconciliation is **opportunistic, per-message**. Most UPI messages carry no
+balance; bill payments, card-network transactions, ATM withdrawals and cash
+deposits do. Each balance-carrying message re-anchors the account. Drift between
+them is invisible until the next one arrives, so the UI must show
+`balance_as_of` alongside any balance. See `docs/corpus-findings.md` §2.
 | credit_limit | Long? | CREDIT_CARD only |
 | statement_day | Int? | CREDIT_CARD only, 1–31 |
 | due_day | Int? | CREDIT_CARD only |
@@ -87,6 +114,7 @@ Immutable. Never edited, never deleted.
 | id | String | |
 | account_id | String | FK |
 | amount | Long | always positive; direction carries sign |
+| currency | String | ISO 4217. Required — the corpus contains USD card transactions. Non-INR excluded from INR totals; no FX conversion in Phase 1. |
 | direction | Enum | DEBIT, CREDIT |
 | occurred_at | Long | |
 | merchant_raw | String? | as it appeared |
@@ -142,6 +170,30 @@ totals stay understated. Therefore:
 - the UI must mark the window between the previous anchor and this one as
   "reconciled from anchor", so aggregate totals in that window are visibly
   lower-confidence
+
+### PayeeAllowlist — Phase 1
+
+Payee names that identify the user's own accounts. Self-transfers appear as
+ordinary UPI payments with the user's own name as merchant, and are frequent and
+large — counting them as expenses inflates spending severely.
+
+| Field | Type | Notes |
+|---|---|---|
+| id | String | |
+| normalized_name | String | uppercase, whitespace collapsed |
+| account_id | String? | the own-account this payee maps to, if known |
+| confirmed_at | Long | user confirmation is required |
+
+Matching: uppercase and collapse whitespace, then exact match.
+`AMAN DHAKAR`, `Aman Dhakar`, `Aman  Dhakar` all normalise to `AMAN DHAKAR`.
+
+**Never infer from surname.** `KIRAN DHAKER` and `RAHUL DHAKAR` also appear in
+the corpus and are genuine outgoing transfers to family. Entries are added only
+by explicit user confirmation from the review inbox.
+
+On match, set `Transaction.is_internal = true`. If the counterpart transaction
+exists (equal amount, same date, a different own-account), link as
+`Transfer(kind = ACCOUNT_TO_ACCOUNT)` in Phase 2.
 
 ### Transfer — Phase 2
 

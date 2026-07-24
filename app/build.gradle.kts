@@ -64,6 +64,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -71,6 +72,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:database"))
     implementation(project(":core:crypto"))
+    implementation(project(":core:update"))
 
     implementation(libs.core.ktx)
     implementation(libs.fragment.ktx)
@@ -86,6 +88,7 @@ dependencies {
 
     implementation(libs.biometric)
     implementation(libs.zxcvbn)
+    implementation(libs.work.runtime.ktx)
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

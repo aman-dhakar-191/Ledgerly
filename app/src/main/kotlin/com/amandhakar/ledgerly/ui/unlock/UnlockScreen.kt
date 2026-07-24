@@ -15,19 +15,25 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.amandhakar.ledgerly.ui.update.UpdateScreen
 
 /** Must be shown verbatim (docs/crypto.md) and cannot be skipped. */
 private const val RECOVERY_WARNING = "Your passphrase is the only way to recover your data. It " +
@@ -36,8 +42,28 @@ private const val RECOVERY_WARNING = "Your passphrase is the only way to recover
     "store it somewhere physical."
 
 @Composable
-fun UnlockScreen(activity: FragmentActivity, viewModel: UnlockViewModel = hiltViewModel()) {
+fun UnlockScreen(
+    activity: FragmentActivity,
+    openUpdate: Boolean = false,
+    viewModel: UnlockViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsState()
+
+    // CryptoManagerImpl.lock() zeroes the master key on background (ProcessLifecycleOwner.onStop),
+    // but this Activity doesn't get recreated on a plain resume, so without this the same
+    // "Unlocked" screen would just keep showing after backgrounding and reopening the app —
+    // refreshLockState() is what actually notices the key is gone and routes back to the gate.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val currentViewModel by rememberUpdatedState(viewModel)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                currentViewModel.refreshLockState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         when (val current = state) {
@@ -47,7 +73,29 @@ fun UnlockScreen(activity: FragmentActivity, viewModel: UnlockViewModel = hiltVi
                 passphraseReentryRequired = current.passphraseReentryRequired,
                 viewModel = viewModel,
             )
-            is UnlockUiState.Unlocked -> Text("Unlocked", modifier = Modifier.padding(24.dp))
+            is UnlockUiState.Unlocked -> HomeScreen(openUpdate = openUpdate)
+        }
+    }
+}
+
+/**
+ * Placeholder home — Task 1.15 builds the real ledger UI. The only thing that lives here today is
+ * the entry point into the dedicated update screen (Task 1.3), reached either by tapping "Check
+ * for updates" or by tapping an update-available notification (`openUpdate`).
+ */
+@Composable
+private fun HomeScreen(openUpdate: Boolean) {
+    var showUpdateScreen by remember { mutableStateOf(openUpdate) }
+
+    if (showUpdateScreen) {
+        UpdateScreen(onBack = { showUpdateScreen = false })
+    } else {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Unlocked")
+            Button(onClick = { showUpdateScreen = true }) { Text("Check for updates") }
         }
     }
 }

@@ -5,11 +5,16 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/** Rules are data, learned at runtime — no bank formats are hardcoded (docs/parser.md). */
-@Entity(tableName = "parser_rule", indices = [Index(value = ["sender_id"])])
+/**
+ * Rules are data, learned at runtime — no bank formats are hardcoded (docs/parser.md).
+ *
+ * Keys on [institution], not the raw sender ID: a rule learned from `AD-ICICIT-S` must fire on
+ * `JX-ICICIT-S` too, since both carry identical ICICI formats (docs/corpus-findings.md §1).
+ */
+@Entity(tableName = "parser_rule", indices = [Index(value = ["institution"])])
 data class ParserRule(
     @PrimaryKey val id: String,
-    @ColumnInfo(name = "sender_id") val senderId: String,
+    val institution: String,
     val pattern: String,
     @ColumnInfo(name = "field_map") val fieldMap: String,
     @ColumnInfo(name = "txn_type") val txnType: ParserTxnType,

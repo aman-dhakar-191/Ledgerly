@@ -65,6 +65,10 @@ reconciliation, golden tests, bootstrap import of existing inbox.
 Also in Phase 1: the in-app update system (`tasks/update-system.md`). Needed
 early because sideloaded builds are how every later phase reaches the device.
 
+Also in Phase 1: **plain data export** (CSV or JSON, to a user-chosen location).
+Small to build, and until Phase 5 lands it is the only recovery path if the app,
+the device, or the signing key is lost. See `docs/signing.md`.
+
 **Exit: live on it for two weeks.** Every real SMS either parses correctly or
 appears in review. Zero silent wrong entries. If the parser can't survive this,
 nothing downstream matters.
@@ -73,10 +77,17 @@ nothing downstream matters.
 
 ## Phase 2 — Correctness
 Transfer detection, credit card as liability, statement SMS parsing, ATM/cash
-handling, refunds and reversals, net worth.
+handling, wallet and BNPL accounts, refunds and reversals, net worth.
+
+Card-payment matching is now specified concretely — see
+`docs/corpus-findings.md` §2a. The bank-side debit carries `InfoBIL*INFT*` and
+pairs with a card-side `Payment of INR {amt} ... Credit Card Account {acct}` of
+equal amount on the same date. Link as `Transfer(kind = CARD_PAYMENT)`; neither
+side is an expense.
 
 **Exit:** monthly income and expense totals match manual verification against
-bank statements. No double-counted card bills.
+bank statements. No double-counted card bills, wallet top-ups, or
+self-transfers.
 
 ---
 
@@ -89,8 +100,17 @@ budgets, rollover, spend-vs-budget views.
 ---
 
 ## Phase 4 — Investments
-Instrument/Holding/BalanceSnapshot, PPF and EPF manual entry, ScheduleRule,
+Instrument/Holding/BalanceSnapshot, PPF and EPF entry, ScheduleRule,
 Contribution matching, price feed for market instruments.
+
+**EPF balances arrive by SMS** (`EPFOHO` senders) with both the passbook balance
+and the monthly contribution — see `docs/corpus-findings.md` §12. The earlier
+assumption that EPF required manual entry from the EPFO portal was wrong. PPF
+still needs manual balance entry, though PPF contribution debits from ICICI will
+parse normally.
+
+Demat and broker senders (`CDSLTX`, `NSESMS`, `BSELTD`, `KFINCR`, `UPSTX`) also
+appear in the corpus and belong to this phase.
 
 **Exit:** SIP debits auto-confirm against expected contributions; portfolio value
 reconciles against broker/EPFO statements.
@@ -124,6 +144,21 @@ expenses, tax section summaries, goals, emergency fund tracking.
 ---
 
 ## Deferred / maybe never
+
+**Notification listener (`NotificationListenerService`)** — reads UPI app
+notifications (GPay, PhonePe, Paytm).
+
+**Not needed.** The corpus analysis found SMS coverage for every source
+originally thought to be a gap, including axio Pay Later spends
+(`docs/corpus-findings.md` §10). Nothing in the current picture requires it.
+
+Were it ever reconsidered, the objections remain:
+- Notification text is UI copy: unstable across app updates, no balance field,
+  no reliable reference ID
+- **Double-counts by default.** A GPay payment from a bank account produces both
+  a GPay notification and a bank SMS, with no shared identifier to dedupe on
+- Ephemeral — no archive, so a parser fix cannot be backfilled, which breaks the
+  rule-validation model the whole parser design rests on
 
 - Shared and split expenses
 - Multi-currency FX rates
