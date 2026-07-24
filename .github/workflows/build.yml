@@ -45,12 +45,12 @@ jobs:
           name: test-reports
           path: '**/build/reports/tests/'
 
-  # Only for pushes to main (or a manual dispatch) — never for pull_request, which has no need
-  # for an APK at all. Builds a debug APK by default; builds+signs a release APK and cuts a
-  # GitHub Release instead when the RELEASE_KEYSTORE_* secrets are present.
+  # Runs on every trigger, including pull_request — a debug build is cheap smoke-test signal for
+  # a PR. Signing/release only ever happens for a push to main (or workflow_dispatch): a PR never
+  # cuts a GitHub Release or builds a signed APK, even though the secrets would technically be
+  # visible to it (same-repo PRs, not a fork).
   build:
     needs: verify
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +72,9 @@ jobs:
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: |
-          if [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          elif [ -n "$RELEASE_KEYSTORE_BASE64" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
           else
             echo "present=false" >> "$GITHUB_OUTPUT"
