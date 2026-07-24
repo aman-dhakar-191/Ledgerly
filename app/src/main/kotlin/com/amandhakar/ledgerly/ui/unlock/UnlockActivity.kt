@@ -25,7 +25,7 @@ class UnlockActivity : FragmentActivity() {
     }
 
     companion object {
-        /** Set by [com.amandhakar.ledgerly.update.UpdateCheckWorker]'s notification tap intent. */
+        /** Set by [com.amandhakar.ledgerly.update.android.UpdateCheckWorker]'s notification tap intent. */
         const val EXTRA_OPEN_UPDATE = "com.amandhakar.ledgerly.extra.OPEN_UPDATE"
     }
 }

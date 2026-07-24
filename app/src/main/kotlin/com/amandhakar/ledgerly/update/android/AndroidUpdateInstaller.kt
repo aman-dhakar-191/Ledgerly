@@ -1,9 +1,13 @@
-package com.amandhakar.ledgerly.update
+package com.amandhakar.ledgerly.update.android
 
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import androidx.core.content.FileProvider
+import com.amandhakar.ledgerly.update.UpdateInfo
+import com.amandhakar.ledgerly.update.UpdateInstaller
+import com.amandhakar.ledgerly.update.isCompleteDownload
+import com.amandhakar.ledgerly.update.verifyMatchingSignatures
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException

@@ -2,8 +2,8 @@ package com.amandhakar.ledgerly.app
 
 import android.app.Application
 import com.amandhakar.ledgerly.crypto.android.ForegroundActivityHolder
-import com.amandhakar.ledgerly.update.NotificationChannels
-import com.amandhakar.ledgerly.update.UpdateCheckWorker
+import com.amandhakar.ledgerly.update.android.NotificationChannels
+import com.amandhakar.ledgerly.update.android.UpdateCheckWorker
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 

@@ -1,4 +1,4 @@
-package com.amandhakar.ledgerly.update
+package com.amandhakar.ledgerly.update.android
 
 import android.app.NotificationChannel
 import android.app.NotificationManager

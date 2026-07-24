@@ -1,6 +1,9 @@
-package com.amandhakar.ledgerly.update
+package com.amandhakar.ledgerly.update.android
 
 import com.amandhakar.ledgerly.BuildConfig
+import com.amandhakar.ledgerly.update.UpdateChecker
+import com.amandhakar.ledgerly.update.UpdateInfo
+import com.amandhakar.ledgerly.update.parseLatestRelease
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -10,8 +13,8 @@ import kotlinx.coroutines.withContext
 
 /**
  * docs/ci.md: unauthenticated, public repo, well under the 60 req/hour rate limit for a daily
- * check. A network failure throws rather than returning null, so [com.amandhakar.ledgerly.update.UpdateCheckWorker]
- * can tell "no update" apart from "couldn't check" and retry the latter.
+ * check. A network failure throws rather than returning null, so [UpdateCheckWorker] can tell
+ * "no update" apart from "couldn't check" and retry the latter.
  */
 class GithubUpdateChecker @Inject constructor() : UpdateChecker {
 

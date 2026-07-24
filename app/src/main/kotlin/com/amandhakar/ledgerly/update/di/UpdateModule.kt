@@ -1,9 +1,9 @@
 package com.amandhakar.ledgerly.update.di
 
-import com.amandhakar.ledgerly.update.AndroidUpdateInstaller
-import com.amandhakar.ledgerly.update.GithubUpdateChecker
 import com.amandhakar.ledgerly.update.UpdateChecker
 import com.amandhakar.ledgerly.update.UpdateInstaller
+import com.amandhakar.ledgerly.update.android.AndroidUpdateInstaller
+import com.amandhakar.ledgerly.update.android.GithubUpdateChecker
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn

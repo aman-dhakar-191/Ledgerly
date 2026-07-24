@@ -1,4 +1,4 @@
-package com.amandhakar.ledgerly.update
+package com.amandhakar.ledgerly.update.android
 
 import android.Manifest
 import android.app.NotificationManager
@@ -21,6 +21,8 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.amandhakar.ledgerly.R
 import com.amandhakar.ledgerly.ui.unlock.UnlockActivity
+import com.amandhakar.ledgerly.update.UpdateChecker
+import com.amandhakar.ledgerly.update.UpdateInfo
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
