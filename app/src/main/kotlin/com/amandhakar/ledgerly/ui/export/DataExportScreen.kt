@@ -38,7 +38,8 @@ private val FILENAME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd")
  * recovery path if the device, the app, or the signing key is lost" (docs/signing.md).
  * `ActivityResultContracts.CreateDocument` is the Compose-idiomatic wrapper around that intent.
  */
-@Suppress("LongMethod") // one launcher per SAF operation (export/import x2 formats); splitting would scatter one screen
+// one launcher per SAF operation (export/import x2 formats); splitting would scatter one screen
+@Suppress("LongMethod", "CyclomaticComplexMethod")
 @Composable
 fun DataExportScreen(onBack: () -> Unit, viewModel: DataExportViewModel = hiltViewModel()) {
     val context = LocalContext.current

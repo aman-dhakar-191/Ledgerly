@@ -66,6 +66,7 @@ fun parseGoldenTestsJson(json: String): List<ImportedGoldenTest> {
     }
 }
 
+@Suppress("ThrowsCount") // one throw per required field, so a missing one names itself in the error
 private fun parseGoldenTestObject(parser: MiniJsonParser): ImportedGoldenTest {
     val fields = mutableMapOf<String, Any?>()
     parser.expect('{')
@@ -127,6 +128,7 @@ private class MiniJsonParser(private val source: String) {
         }
     }
 
+    @Suppress("CyclomaticComplexMethod", "ThrowsCount") // one branch per JSON escape sequence; inherently this shape
     fun parseString(): String {
         expect('"')
         val result = StringBuilder()
