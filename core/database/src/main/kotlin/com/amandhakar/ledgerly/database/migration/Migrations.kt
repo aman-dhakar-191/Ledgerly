@@ -32,8 +32,45 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         db.execSQL("UPDATE sender_registry SET institution = sender_id")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_sender_registry_institution ON sender_registry(institution)")
 
-        db.execSQL("ALTER TABLE parser_rule RENAME COLUMN sender_id TO institution")
-        db.execSQL("DROP INDEX IF EXISTS index_parser_rule_sender_id")
+        // Not ALTER TABLE ... RENAME COLUMN: that needs SQLite 3.25+ (Android 9/API 28), and this
+        // app's minSdk is 26 — recreate the table instead, which every SQLite version supports.
+        db.execSQL(
+            """
+            CREATE TABLE parser_rule_new (
+                id TEXT NOT NULL PRIMARY KEY,
+                institution TEXT NOT NULL,
+                pattern TEXT NOT NULL,
+                field_map TEXT NOT NULL,
+                txn_type TEXT NOT NULL,
+                priority INTEGER NOT NULL,
+                confidence REAL NOT NULL,
+                active INTEGER NOT NULL,
+                created_from_sms_id TEXT NOT NULL,
+                match_count INTEGER NOT NULL,
+                correction_count INTEGER NOT NULL,
+                version INTEGER NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                deleted_at INTEGER
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            INSERT INTO parser_rule_new (
+                id, institution, pattern, field_map, txn_type, priority, confidence, active,
+                created_from_sms_id, match_count, correction_count, version,
+                created_at, updated_at, deleted_at
+            )
+            SELECT
+                id, sender_id, pattern, field_map, txn_type, priority, confidence, active,
+                created_from_sms_id, match_count, correction_count, version,
+                created_at, updated_at, deleted_at
+            FROM parser_rule
+            """.trimIndent(),
+        )
+        db.execSQL("DROP TABLE parser_rule")
+        db.execSQL("ALTER TABLE parser_rule_new RENAME TO parser_rule")
         db.execSQL("CREATE INDEX IF NOT EXISTS index_parser_rule_institution ON parser_rule(institution)")
     }
 }

@@ -25,6 +25,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -33,7 +34,14 @@ import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.amandhakar.ledgerly.ingest.LastProcessedStore
+import com.amandhakar.ledgerly.ui.accounts.AccountsScreen
+import com.amandhakar.ledgerly.ui.initialization.InitializationScreen
+import com.amandhakar.ledgerly.ui.sms.SmsPermissionScreen
 import com.amandhakar.ledgerly.ui.update.UpdateScreen
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /** Must be shown verbatim (docs/crypto.md) and cannot be skipped. */
 private const val RECOVERY_WARNING = "Your passphrase is the only way to recover your data. It " +
@@ -86,9 +94,28 @@ fun UnlockScreen(
 @Composable
 private fun HomeScreen(openUpdate: Boolean) {
     var showUpdateScreen by remember { mutableStateOf(openUpdate) }
+    var showSmsPermissionScreen by remember { mutableStateOf(false) }
+    var showAccountsScreen by remember { mutableStateOf(false) }
+    var showInitializationScreen by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var lastProcessedAt by remember { mutableStateOf<Long?>(null) }
+
+    // Re-read whenever the SMS permission/import flow closes, since that's when a fresh import or
+    // the periodic catch-up worker (Task 1.16) may have just advanced the mark.
+    LaunchedEffect(showSmsPermissionScreen) {
+        if (!showSmsPermissionScreen) {
+            lastProcessedAt = LastProcessedStore(context).getLastProcessedAt()
+        }
+    }
 
     if (showUpdateScreen) {
         UpdateScreen(onBack = { showUpdateScreen = false })
+    } else if (showSmsPermissionScreen) {
+        SmsPermissionScreen(onDone = { showSmsPermissionScreen = false })
+    } else if (showAccountsScreen) {
+        AccountsScreen(onBack = { showAccountsScreen = false })
+    } else if (showInitializationScreen) {
+        InitializationScreen(onBack = { showInitializationScreen = false })
     } else {
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -96,8 +123,21 @@ private fun HomeScreen(openUpdate: Boolean) {
         ) {
             Text("Unlocked")
             Button(onClick = { showUpdateScreen = true }) { Text("Check for updates") }
+            Button(onClick = { showSmsPermissionScreen = true }) { Text("Import transactions from SMS") }
+            Button(onClick = { showAccountsScreen = true }) { Text("Accounts") }
+            Button(onClick = { showInitializationScreen = true }) { Text("Set up ledger") }
+            Text(
+                "Last SMS processed: ${formatLastProcessed(lastProcessedAt)}",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
+}
+
+private fun formatLastProcessed(epochMillis: Long?): String {
+    if (epochMillis == null) return "never"
+    val formatter = DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm")
+    return Instant.ofEpochMilli(epochMillis).atZone(ZoneId.systemDefault()).format(formatter)
 }
 
 @Composable

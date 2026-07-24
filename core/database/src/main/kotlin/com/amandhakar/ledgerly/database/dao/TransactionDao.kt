@@ -11,6 +11,19 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TransactionDao {
+
+    /**
+     * Task 1.11's reconciliation baseline: the signed sum of every `CONFIRMED` transaction for
+     * this account strictly after the anchor and at or before the transaction under test. Signed
+     * so the caller can add it straight to the anchor's balance — `DEBIT` already comes back
+     * negative, `CREDIT` positive.
+     */
+    @Query(
+        "SELECT COALESCE(SUM(CASE WHEN direction = 'DEBIT' THEN -amount ELSE amount END), 0) " +
+            "FROM transaction_entity WHERE account_id = :accountId AND status = 'CONFIRMED' " +
+            "AND occurred_at > :anchorAsOf AND occurred_at <= :occurredAt AND deleted_at IS NULL",
+    )
+    suspend fun getSignedSumSinceAnchor(accountId: String, anchorAsOf: Long, occurredAt: Long): Long
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(transaction: Transaction): Long
 
