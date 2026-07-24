@@ -27,6 +27,9 @@ class GithubUpdateChecker @Inject constructor() : UpdateChecker {
         val connection = URL(url).openConnection() as HttpURLConnection
         connection.requestMethod = "GET"
         connection.setRequestProperty("Accept", "application/vnd.github+json")
+        // GitHub's API rejects requests with no User-Agent header; HttpURLConnection's Java-default
+        // one isn't always accepted by every network path, so set an explicit one.
+        connection.setRequestProperty("User-Agent", "Ledgerly-Android-UpdateChecker")
         connection.connectTimeout = CONNECT_TIMEOUT_MILLIS
         connection.readTimeout = READ_TIMEOUT_MILLIS
         try {
