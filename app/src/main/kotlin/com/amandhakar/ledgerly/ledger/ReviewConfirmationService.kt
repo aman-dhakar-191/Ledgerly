@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.first
  * either just means no rule this round, not a blocked confirmation — the transaction and golden
  * test are written regardless.
  */
+@Suppress("LongParameterList") // one DAO per entity this service touches, matching codebase precedent
 class ReviewConfirmationService @Inject constructor(
     private val transactionDao: TransactionDao,
     private val rawSmsDao: RawSmsDao,
