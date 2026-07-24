@@ -48,7 +48,12 @@ malformed input returns null; arithmetic; formatting.
 
 Implement Phase 0 and Phase 1 entities from `docs/schema.md`:
 `RawSms`, `SenderRegistry`, `ParserRule`, `GoldenTest`, `Account`, `Transaction`,
-`TransactionAudit`.
+`TransactionAudit`, `BalanceAnchor`.
+
+> **Added after Phase 0 started.** If Task 0.3 is already complete,
+> `BalanceAnchor` is a small additive change: new entity, new DAO, index on
+> `(account_id, as_of)`. No existing entity changes. Add it and extend the
+> Task 0.4 DAO tests.
 
 Every entity: `id: String` (UUID), `created_at`, `updated_at`, `deleted_at: Long?`.
 
