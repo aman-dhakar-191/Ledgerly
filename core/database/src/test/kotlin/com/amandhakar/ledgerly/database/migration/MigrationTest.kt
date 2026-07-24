@@ -155,4 +155,23 @@ class MigrationTest {
             assertThat(cursor.getString(cursor.getColumnIndexOrThrow("parse_status"))).isEqualTo("UNPROCESSED")
         }
     }
+
+    /** Task 1.12/docs/schema.md: a fresh table, not an alteration - just needs to exist and accept a row. */
+    @Test
+    fun `migrate 4 to 5 creates the payee_allowlist table`() {
+        helper.createDatabase(testDbName, 4).apply { close() }
+
+        val migrated = helper.runMigrationsAndValidate(testDbName, 5, true, MIGRATION_4_5)
+
+        migrated.execSQL(
+            """
+            INSERT INTO payee_allowlist (id, normalized_name, account_id, confirmed_at, created_at, updated_at, deleted_at)
+            VALUES ('payee-1', 'AMAN DHAKAR', NULL, 1700000000000, 1700000000000, 1700000000000, NULL)
+            """.trimIndent(),
+        )
+        migrated.query("SELECT * FROM payee_allowlist WHERE id = 'payee-1'").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getString(cursor.getColumnIndexOrThrow("normalized_name"))).isEqualTo("AMAN DHAKAR")
+        }
+    }
 }
