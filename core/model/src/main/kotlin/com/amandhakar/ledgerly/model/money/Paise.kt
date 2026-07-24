@@ -48,11 +48,14 @@ value class Paise(val value: Long) {
         val ZERO = Paise(0)
 
         private val AMOUNT_PATTERN = Regex(
-            """(?i)^\s*(?:rs\.?|inr|₹)?\s*([\d,]+(?:\.\d{1,2})?)\s*(?:rs\.?|inr|₹)?\s*$"""
+            """(?i)^\s*(?:rs\.?|inr|usd|₹)?\s*(\d[\d,]*(?:\.\d{1,2})?|\.\d{1,2})\s*(?:/-)?\s*(?:rs\.?|inr|₹)?\s*$"""
         )
 
         /**
-         * Parses strings like `"1,234.56"`, `"Rs.500"`, `"INR 42"`, `"₹1,00,000.5"`.
+         * Parses strings like `"1,234.56"`, `"Rs.500"`, `"Rs656.7"` (no-space prefix, axio),
+         * `"INR 42"`, `"₹1,00,000.5"`, `".30"` (bare leading decimal, ICICI statements),
+         * `"7,050/-"` (trailing slash-dash, EPFO) and `"USD 23.60"` (non-INR; the caller is
+         * responsible for the currency itself, this only parses the numeric amount).
          * Returns null for malformed input rather than throwing — callers route
          * unparseable amounts to review, they never crash the parser.
          */

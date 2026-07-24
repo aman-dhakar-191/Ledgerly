@@ -20,6 +20,17 @@ class PaiseTest {
         "'  250.00  ', 25000",
         "'500 Rs.', 50000",
         "'1234.5', 123450",
+        "'Rs656.7', 65670",
+        "'Rs 1698', 169800",
+        "'INR 2,170.00', 217000",
+        "'50.0', 5000",
+        "'2', 200",
+        "'210.25', 21025",
+        "'.00', 0",
+        "'.30', 30",
+        "'7,050/-', 705000",
+        "'USD 23.60', 2360",
+        "'Rs .00', 0",
     )
     fun `parses valid rupee strings`(input: String, expectedPaise: Long) {
         assertThat(Paise.fromRupeeString(input)).isEqualTo(Paise(expectedPaise))
