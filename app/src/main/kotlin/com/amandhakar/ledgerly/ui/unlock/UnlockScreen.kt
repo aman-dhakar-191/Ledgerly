@@ -37,6 +37,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.amandhakar.ledgerly.ingest.LastProcessedStore
 import com.amandhakar.ledgerly.ui.accounts.AccountsScreen
 import com.amandhakar.ledgerly.ui.initialization.InitializationScreen
+import com.amandhakar.ledgerly.ui.review.ReviewInboxScreen
 import com.amandhakar.ledgerly.ui.senders.SenderClassificationScreen
 import com.amandhakar.ledgerly.ui.sms.SmsPermissionScreen
 import com.amandhakar.ledgerly.ui.update.UpdateScreen
@@ -99,6 +100,7 @@ private fun HomeScreen(openUpdate: Boolean) {
     var showAccountsScreen by remember { mutableStateOf(false) }
     var showInitializationScreen by remember { mutableStateOf(false) }
     var showSenderClassificationScreen by remember { mutableStateOf(false) }
+    var showReviewInboxScreen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     var lastProcessedAt by remember { mutableStateOf<Long?>(null) }
 
@@ -120,6 +122,8 @@ private fun HomeScreen(openUpdate: Boolean) {
         InitializationScreen(onBack = { showInitializationScreen = false })
     } else if (showSenderClassificationScreen) {
         SenderClassificationScreen(onBack = { showSenderClassificationScreen = false })
+    } else if (showReviewInboxScreen) {
+        ReviewInboxScreen(onBack = { showReviewInboxScreen = false })
     } else {
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -131,6 +135,7 @@ private fun HomeScreen(openUpdate: Boolean) {
             Button(onClick = { showAccountsScreen = true }) { Text("Accounts") }
             Button(onClick = { showInitializationScreen = true }) { Text("Set up ledger") }
             Button(onClick = { showSenderClassificationScreen = true }) { Text("Classify senders") }
+            Button(onClick = { showReviewInboxScreen = true }) { Text("Review inbox") }
             Text(
                 "Last SMS processed: ${formatLastProcessed(lastProcessedAt)}",
                 style = MaterialTheme.typography.bodySmall,
