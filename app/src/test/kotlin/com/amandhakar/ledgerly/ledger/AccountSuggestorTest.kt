@@ -3,6 +3,8 @@ package com.amandhakar.ledgerly.ledger
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.amandhakar.ledgerly.database.LedgerlyDatabase
+import com.amandhakar.ledgerly.database.entity.Account
+import com.amandhakar.ledgerly.database.entity.AccountType
 import com.amandhakar.ledgerly.database.entity.ParseStatus
 import com.amandhakar.ledgerly.database.entity.RawSms
 import com.amandhakar.ledgerly.database.entity.SenderRegistry
@@ -91,5 +93,54 @@ class AccountSuggestorTest {
 
         assertThat(suggestions.single().institution).isEqualTo("ICICIT")
         assertThat(suggestions.single().last4).isEqualTo("924")
+    }
+
+    private fun account(last4: String?) = Account(
+        id = "acct-1",
+        name = "Test",
+        type = AccountType.SAVINGS,
+        last4 = last4,
+        currency = "INR",
+        currentBalance = 0,
+        balanceAsOf = 0,
+        creditLimit = null,
+        statementDay = null,
+        dueDay = null,
+        archived = false,
+        createdAt = 0,
+        updatedAt = 0,
+        deletedAt = null,
+    )
+
+    @Test
+    fun `prefillAnchor picks the earliest post-start message matching this account's last4`() = runTest {
+        val ledgerStartDate = 1_000L
+        archive(
+            "AD-ICICIT-S",
+            "ICICI Bank Acc XX924 debited Rs. 5000.00 on 12-Jun-26 InfoBIL*INFT*CC001.Avl Bal Rs. 45,231.50",
+            ledgerStartDate + 2_000,
+        )
+        // A different account's last4 — must not be picked.
+        archive(
+            "AD-ICICIT-S",
+            "ICICI Bank Credit Card XX6001 debited for INR 585.28 on 15-Jun-26 for UPI-1-ZOMATO",
+            ledgerStartDate + 1_000,
+        )
+
+        val prefill = suggestor.prefillAnchor(account(last4 = "924"), ledgerStartDate)
+
+        assertThat(prefill?.balance).isEqualTo(4_523_150L)
+        assertThat(prefill?.asOf).isEqualTo(ledgerStartDate + 2_000)
+    }
+
+    @Test
+    fun `prefillAnchor returns null for an account with no last4 to match on`() = runTest {
+        archive(
+            "AD-ICICIT-S",
+            "ICICI Bank Acc XX924 debited Rs. 5000.00 on 12-Jun-26 InfoBIL*INFT*CC001.Avl Bal Rs. 45,231.50",
+            2_000L,
+        )
+
+        assertThat(suggestor.prefillAnchor(account(last4 = null), ledgerStartDate = 0L)).isNull()
     }
 }
