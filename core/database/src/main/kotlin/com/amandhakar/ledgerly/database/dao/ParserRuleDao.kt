@@ -23,10 +23,10 @@ interface ParserRuleDao {
     suspend fun getById(id: String): ParserRule?
 
     @Query(
-        "SELECT * FROM parser_rule WHERE sender_id = :senderId AND active = 1 AND deleted_at IS NULL " +
+        "SELECT * FROM parser_rule WHERE institution = :institution AND active = 1 AND deleted_at IS NULL " +
             "ORDER BY priority DESC, LENGTH(pattern) DESC",
     )
-    suspend fun getActiveForSender(senderId: String): List<ParserRule>
+    suspend fun getActiveForInstitution(institution: String): List<ParserRule>
 
     @Query("UPDATE parser_rule SET deleted_at = :deletedAt WHERE id = :id")
     suspend fun softDelete(id: String, deletedAt: Long)

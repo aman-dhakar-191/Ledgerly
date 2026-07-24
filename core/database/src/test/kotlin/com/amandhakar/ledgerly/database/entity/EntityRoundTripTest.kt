@@ -59,6 +59,7 @@ class EntityRoundTripTest {
     fun `SenderRegistry round trips`() = runTest {
         val sender = SenderRegistry(
             senderId = "VM-HDFCBK",
+            institution = "HDFCBK",
             label = "HDFC Bank",
             type = SenderType.BANK,
             trusted = true,
@@ -73,14 +74,14 @@ class EntityRoundTripTest {
 
     @Test
     fun `ParserRule round trips`() = runTest {
-        val sender = SenderRegistry("VM-HDFCBK", "HDFC Bank", SenderType.BANK, true, null, now, now, null)
+        val sender = SenderRegistry("VM-HDFCBK", "HDFCBK", "HDFC Bank", SenderType.BANK, true, null, now, now, null)
         db.senderRegistryDao().insert(sender)
         val sms = rawSms("sms-1", "hash-1")
         db.rawSmsDao().insert(sms)
 
         val rule = ParserRule(
             id = "rule-1",
-            senderId = "VM-HDFCBK",
+            institution = "HDFCBK",
             pattern = "Rs\\.(\\d+) debited",
             fieldMap = """{"1":"amount"}""",
             txnType = ParserTxnType.DEBIT,

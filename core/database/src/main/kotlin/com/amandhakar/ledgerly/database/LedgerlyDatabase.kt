@@ -36,7 +36,7 @@ import com.amandhakar.ledgerly.database.entity.TransactionAudit
         TransactionAudit::class,
         BalanceAnchor::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
