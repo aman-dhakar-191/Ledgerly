@@ -32,6 +32,7 @@ class MissedSmsCatchUpWorker(context: Context, params: WorkerParameters) : Corou
         fun lastProcessedStore(): LastProcessedStore
     }
 
+    @Suppress("ReturnCount") // guard-clause style is clearer than nesting here
     override suspend fun doWork(): Result {
         val granted = ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.READ_SMS) ==
             PackageManager.PERMISSION_GRANTED
