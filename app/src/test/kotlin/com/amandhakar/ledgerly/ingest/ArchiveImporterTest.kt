@@ -35,8 +35,13 @@ class FakeSmsInboxProvider : ContentProvider() {
         val cursor = MatrixCursor(
             arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.SUBSCRIPTION_ID),
         )
+        // Only the "${Telephony.Sms.DATE} > ?" selection ArchiveImporter.importSince ever issues.
+        val since = if (selection != null) selectionArgs?.get(0)?.toLong() else null
         repeat(MESSAGE_COUNT) { i ->
-            cursor.addRow(arrayOf("AD-ICICIT-S", "message number $i", (1_700_000_000_000L + i), 1))
+            val date = 1_700_000_000_000L + i
+            if (since == null || date > since) {
+                cursor.addRow(arrayOf("AD-ICICIT-S", "message number $i", date, 1))
+            }
         }
         return cursor
     }
@@ -63,7 +68,7 @@ class ArchiveImporterTest {
             .build()
         importer = ArchiveImporter(
             ApplicationProvider.getApplicationContext(),
-            RawSmsArchiver(db.rawSmsDao()),
+            RawSmsArchiver(db.rawSmsDao(), LastProcessedStore(ApplicationProvider.getApplicationContext())),
         )
     }
 
@@ -98,5 +103,14 @@ class ArchiveImporterTest {
 
         assertThat(reportedTotal).isEqualTo(MESSAGE_COUNT)
         assertThat(lastImported).isEqualTo(MESSAGE_COUNT)
+    }
+
+    @Test
+    fun `importSince only archives messages strictly newer than the given timestamp`() = runTest {
+        val cutoff = 1_700_000_000_000L + (MESSAGE_COUNT - 3)
+
+        importer.importSince(cutoff)
+
+        assertThat(db.rawSmsDao().observeAll().first()).hasSize(2)
     }
 }

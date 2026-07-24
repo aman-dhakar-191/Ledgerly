@@ -31,7 +31,7 @@ class RawSmsArchiverTest {
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LedgerlyDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        archiver = RawSmsArchiver(db.rawSmsDao())
+        archiver = RawSmsArchiver(db.rawSmsDao(), LastProcessedStore(ApplicationProvider.getApplicationContext()))
     }
 
     @After
@@ -85,5 +85,16 @@ class RawSmsArchiverTest {
         )
         assertThat(stored?.parseStatus).isEqualTo(ParseStatus.UNPROCESSED)
         assertThat(stored?.subscriptionId).isNull()
+    }
+
+    @Test
+    fun `archiving advances the last-processed-at mark, used by Task 1_16's catch-up worker`() = runTest {
+        val store = LastProcessedStore(ApplicationProvider.getApplicationContext())
+        val archiverWithStore = RawSmsArchiver(db.rawSmsDao(), store)
+
+        archiverWithStore.archive("AD-ICICIT-S", 1_700_000_000_000L, subscriptionId = 1, body = "message one")
+        archiverWithStore.archive("AD-ICICIT-S", 1_700_000_001_000L, subscriptionId = 1, body = "message two")
+
+        assertThat(store.getLastProcessedAt()).isEqualTo(1_700_000_001_000L)
     }
 }

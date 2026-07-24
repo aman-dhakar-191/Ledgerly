@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.amandhakar.ledgerly.ingest.ArchiveImportWorker
+import com.amandhakar.ledgerly.ingest.MissedSmsCatchUpWorker
 
 private const val RATIONALE = "Ledgerly reads your bank and card SMS to build your ledger " +
     "automatically. Messages are processed entirely on this device and never leave it. " +
@@ -44,6 +45,7 @@ fun SmsPermissionScreen(onDone: () -> Unit) {
     ) { results ->
         if (results.values.all { it }) {
             ArchiveImportWorker.enqueue(context)
+            MissedSmsCatchUpWorker.schedule(context)
             onDone()
         } else {
             deniedOnce = true
@@ -55,6 +57,7 @@ fun SmsPermissionScreen(onDone: () -> Unit) {
             PackageManager.PERMISSION_GRANTED
         if (alreadyGranted) {
             ArchiveImportWorker.enqueue(context)
+            MissedSmsCatchUpWorker.schedule(context)
             onDone()
         }
     }

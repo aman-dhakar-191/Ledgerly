@@ -10,6 +10,10 @@ import javax.inject.Inject
  * inbox goes — raw text is cheap and it's the validation corpus for rule generation (Task 1.7).
  * No parsing here either, same as [SmsReceiver]; this only archives via [RawSmsArchiver], whose
  * dedupe_hash uniqueness is what makes running this twice insert nothing new.
+ *
+ * Also backs Task 1.16's missed-message catch-up: [importSince] scans the same inbox but bounded
+ * to messages newer than a given timestamp, for the periodic scan that covers whatever the live
+ * [SmsReceiver] missed (battery optimisation, doze, OEM process killing).
  */
 class ArchiveImporter @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -17,6 +21,23 @@ class ArchiveImporter @Inject constructor(
 ) {
     /** [onProgress] fires every [PROGRESS_BATCH_SIZE] messages, plus once at the end. */
     suspend fun importAll(onProgress: suspend (imported: Int, total: Int) -> Unit = { _, _ -> }) {
+        query(selection = null, selectionArgs = null, onProgress)
+    }
+
+    /** Only messages strictly newer than [sinceMillis]. */
+    suspend fun importSince(sinceMillis: Long, onProgress: suspend (imported: Int, total: Int) -> Unit = { _, _ -> }) {
+        query(
+            selection = "${Telephony.Sms.DATE} > ?",
+            selectionArgs = arrayOf(sinceMillis.toString()),
+            onProgress,
+        )
+    }
+
+    private suspend fun query(
+        selection: String?,
+        selectionArgs: Array<String>?,
+        onProgress: suspend (imported: Int, total: Int) -> Unit,
+    ) {
         val projection = arrayOf(
             Telephony.Sms.ADDRESS,
             Telephony.Sms.BODY,
@@ -26,8 +47,8 @@ class ArchiveImporter @Inject constructor(
         context.contentResolver.query(
             Telephony.Sms.Inbox.CONTENT_URI,
             projection,
-            null,
-            null,
+            selection,
+            selectionArgs,
             "${Telephony.Sms.DATE} ASC",
         )?.use { cursor ->
             val total = cursor.count

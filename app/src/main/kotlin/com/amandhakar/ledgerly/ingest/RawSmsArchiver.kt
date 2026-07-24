@@ -13,7 +13,10 @@ import javax.inject.Inject
  * testable against a real (in-memory) Room database rather than needing a Robolectric-shadowed
  * `SmsMessage`/broadcast `Intent` just to exercise the dedupe path.
  */
-class RawSmsArchiver @Inject constructor(private val rawSmsDao: RawSmsDao) {
+class RawSmsArchiver @Inject constructor(
+    private val rawSmsDao: RawSmsDao,
+    private val lastProcessedStore: LastProcessedStore,
+) {
 
     /** Idempotent: a duplicate `dedupe_hash` (same sender/timestamp/body) inserts once. */
     suspend fun archive(sender: String, receivedAt: Long, subscriptionId: Int?, body: String) {
@@ -39,5 +42,6 @@ class RawSmsArchiver @Inject constructor(private val rawSmsDao: RawSmsDao) {
         ) {
             // Already archived — a re-delivered broadcast or overlap with the archive-import scan.
         }
+        lastProcessedStore.recordProcessed(receivedAt)
     }
 }
