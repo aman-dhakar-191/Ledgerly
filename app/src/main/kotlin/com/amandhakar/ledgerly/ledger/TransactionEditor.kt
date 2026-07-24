@@ -1,5 +1,7 @@
 package com.amandhakar.ledgerly.ledger
 
+import com.amandhakar.ledgerly.database.dao.ParserRuleDao
+import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.TransactionAuditDao
 import com.amandhakar.ledgerly.database.dao.TransactionDao
 import com.amandhakar.ledgerly.database.entity.Transaction
@@ -14,10 +16,12 @@ import javax.inject.Inject
 class TransactionEditor @Inject constructor(
     private val transactionDao: TransactionDao,
     private val transactionAuditDao: TransactionAuditDao,
+    private val rawSmsDao: RawSmsDao,
+    private val parserRuleDao: ParserRuleDao,
 ) {
     suspend fun edit(transaction: Transaction, correction: ReviewCorrection) {
         val now = System.currentTimeMillis()
-        writeTransactionEditAudit(transactionAuditDao, transaction, correction, now)
+        val changed = writeTransactionEditAudit(transactionAuditDao, transaction, correction, now)
         transactionDao.update(
             transaction.copy(
                 amount = correction.amount,
@@ -28,5 +32,6 @@ class TransactionEditor @Inject constructor(
                 updatedAt = now,
             ),
         )
+        if (changed) maybeIncrementRuleCorrection(rawSmsDao, parserRuleDao, transaction, now)
     }
 }

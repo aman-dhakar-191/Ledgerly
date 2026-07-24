@@ -1,5 +1,7 @@
 package com.amandhakar.ledgerly.ledger
 
+import com.amandhakar.ledgerly.database.dao.ParserRuleDao
+import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.TransactionAuditDao
 import com.amandhakar.ledgerly.database.entity.AuditReason
 import com.amandhakar.ledgerly.database.entity.Transaction
@@ -11,13 +13,18 @@ import java.util.UUID
  * [ReviewConfirmationService] (a `PENDING_REVIEW` transaction's first confirmation) and
  * [TransactionEditor] (editing an already-`CONFIRMED` one from the ledger) — same diff, same
  * reason, different callers.
+ *
+ * Returns whether anything actually changed, so the caller knows whether to also count this as a
+ * correction against whichever [com.amandhakar.ledgerly.database.entity.ParserRule] produced the
+ * transaction (docs/parser.md's rule health: "correction_count increments when the user edits a
+ * transaction that a rule produced").
  */
 suspend fun writeTransactionEditAudit(
     transactionAuditDao: TransactionAuditDao,
     transaction: Transaction,
     correction: ReviewCorrection,
     now: Long,
-) {
+): Boolean {
     val changes = listOf(
         "amount" to (transaction.amount.toString() to correction.amount.toString()),
         "direction" to (transaction.direction.toString() to correction.direction.toString()),
@@ -42,4 +49,22 @@ suspend fun writeTransactionEditAudit(
             ),
         )
     }
+    return changes.isNotEmpty()
+}
+
+/**
+ * docs/parser.md's rule health: a correction against whichever rule produced [transaction], found
+ * via the archive it came from — `RawSms.matchedRuleId`, not `Transaction` itself, since that's
+ * where a match is actually recorded (Tier 2 suggestions never set it).
+ */
+suspend fun maybeIncrementRuleCorrection(
+    rawSmsDao: RawSmsDao,
+    parserRuleDao: ParserRuleDao,
+    transaction: Transaction,
+    now: Long,
+) {
+    val rawSms = transaction.rawSmsId?.let { rawSmsDao.getById(it) } ?: return
+    val ruleId = rawSms.matchedRuleId ?: return
+    val rule = parserRuleDao.getById(ruleId) ?: return
+    parserRuleDao.update(rule.copy(correctionCount = rule.correctionCount + 1, updatedAt = now))
 }

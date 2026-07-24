@@ -1,34 +1,49 @@
 package com.amandhakar.ledgerly.ledger
 
 import com.amandhakar.ledgerly.database.dao.AccountDao
+import com.amandhakar.ledgerly.database.dao.BalanceAnchorDao
+import com.amandhakar.ledgerly.database.dao.ParserRuleDao
 import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.SenderRegistryDao
 import com.amandhakar.ledgerly.database.dao.TransactionDao
 import com.amandhakar.ledgerly.database.entity.Account
+import com.amandhakar.ledgerly.database.entity.BalanceAnchor
+import com.amandhakar.ledgerly.database.entity.BalanceAnchorSource
 import com.amandhakar.ledgerly.database.entity.ParseStatus
+import com.amandhakar.ledgerly.database.entity.ParserRule
+import com.amandhakar.ledgerly.database.entity.ParserTxnType
 import com.amandhakar.ledgerly.database.entity.RawSms
 import com.amandhakar.ledgerly.database.entity.SenderRegistry
 import com.amandhakar.ledgerly.database.entity.SenderType
 import com.amandhakar.ledgerly.database.entity.Transaction
 import com.amandhakar.ledgerly.database.entity.TransactionSource
 import com.amandhakar.ledgerly.database.entity.TransactionStatus
+import com.amandhakar.ledgerly.model.money.Paise
+import com.amandhakar.ledgerly.parser.GeneratedRule
 import com.amandhakar.ledgerly.parser.GenericExtraction
 import com.amandhakar.ledgerly.parser.GenericExtractor
+import com.amandhakar.ledgerly.parser.MatchOutcome
 import com.amandhakar.ledgerly.parser.ParseClass
+import com.amandhakar.ledgerly.parser.ReconciliationResult
+import com.amandhakar.ledgerly.parser.capturedFields
 import com.amandhakar.ledgerly.parser.classify
+import com.amandhakar.ledgerly.parser.matchWithTimeout
 import com.amandhakar.ledgerly.parser.normalizeSender
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
 import com.amandhakar.ledgerly.database.entity.Direction as EntityDirection
 import com.amandhakar.ledgerly.database.entity.ParseClass as EntityParseClass
+import com.amandhakar.ledgerly.parser.Direction as ParserDirection
 
 /**
- * docs/parser.md's Flow diagram, wired to real data. Tier 1 (learned [com.amandhakar.ledgerly.database.entity.ParserRule]
- * matching) isn't wired yet — a fresh install has no rules, so every message that reaches here
- * today goes through Tier 2 (the generic extractor) and lands in the review inbox (Task 1.13) for
- * the user to confirm, which is what generates the first rule (Task 1.7's `generateRule`).
- *
+ * docs/parser.md's Flow diagram, wired to real data:
+ * ```
+ * pre-filter -> sender trust gate -> ledger_start_date gate
+ *   -> active ParserRule for institution?
+ *        yes -> match by priority desc; match -> reconcile -> CONFIRMED/flagged; no match -> REVIEW
+ *        no  -> Tier 2 (generic extractor) -> PENDING_REVIEW
+ * ```
  * `is_internal` (Task 1.12) is never set here: the allowlist is only ever populated by explicit
  * user confirmation from the review inbox, never inferred at ingestion.
  */
@@ -37,6 +52,9 @@ class SmsParsingPipeline @Inject constructor(
     private val senderRegistryDao: SenderRegistryDao,
     private val accountDao: AccountDao,
     private val transactionDao: TransactionDao,
+    private val parserRuleDao: ParserRuleDao,
+    private val balanceAnchorDao: BalanceAnchorDao,
+    private val transactionReconciler: TransactionReconciler,
     private val ledgerSettingsStore: LedgerSettingsStore,
 ) {
     suspend fun processUnprocessed() {
@@ -54,6 +72,20 @@ class SmsParsingPipeline @Inject constructor(
         rawSmsDao.getByStatus(ParseStatus.IGNORED)
             .filter { normalizeSender(it.sender) == institution }
             .forEach { processOne(it) }
+    }
+
+    /**
+     * docs/parser.md's backfill: "When a rule is added or changed, re-run over RawSms where
+     * parse_status IN (REVIEW, FAILED) for that sender." [applyRule] itself refuses to touch an
+     * already-`CONFIRMED` transaction, so this can never clobber a user's own confirmation.
+     */
+    suspend fun backfillRule(rule: ParserRule) {
+        (rawSmsDao.getByStatus(ParseStatus.REVIEW) + rawSmsDao.getByStatus(ParseStatus.FAILED))
+            .filter { it.institution == rule.institution }
+            .forEach { sms ->
+                val sender = senderRegistryDao.getById(sms.sender) ?: return@forEach
+                applyRule(sms, rule.institution, sender, rule)
+            }
     }
 
     @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this pipeline
@@ -79,6 +111,19 @@ class SmsParsingPipeline @Inject constructor(
             return
         }
 
+        val activeRules = parserRuleDao.getActiveForInstitution(institution)
+        if (activeRules.isNotEmpty()) {
+            // Tier 2 is a seed, never a fallback: if every active rule fails, this goes to review
+            // as-is, it is not re-parsed by the generic extractor (docs/parser.md).
+            val matched = activeRules.any { rule -> applyRule(sms, institution, sender, rule) }
+            if (!matched) markTerminal(sms, institution, parseClass, ParseStatus.REVIEW)
+            return
+        }
+
+        processTier2(sms, institution, parseClass, sender)
+    }
+
+    private suspend fun processTier2(sms: RawSms, institution: String, parseClass: ParseClass, sender: SenderRegistry) {
         val extraction = GenericExtractor.extract(sms.body, sms.receivedAt)
         val amount = extraction.amount.value
         val direction = extraction.direction.value
@@ -90,8 +135,53 @@ class SmsParsingPipeline @Inject constructor(
             return
         }
 
-        writeTransaction(sms, account, extraction, amount, direction.toEntityDirection())
+        writeGenericTransaction(sms, account, extraction, amount, direction.toEntityDirection())
         markTerminal(sms, institution, parseClass, ParseStatus.REVIEW)
+    }
+
+    /**
+     * Tier 1: tries [rule] against [sms]. Returns true iff the pattern matched — a match that
+     * reconciliation flags as a [ReconciliationResult.Mismatch] still counts as "the rule matched,"
+     * per docs/parser.md ("no match -> PENDING_REVIEW; do NOT fall to generic" is about the regex
+     * not matching at all, not about a balance disagreement).
+     */
+    @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this validation-heavy path
+    private suspend fun applyRule(sms: RawSms, institution: String, sender: SenderRegistry, rule: ParserRule): Boolean {
+        val pattern = runCatching { Regex(rule.pattern) }.getOrNull() ?: return false
+        val match = matchWithTimeout(pattern, sms.body)
+        if (match !is MatchOutcome.Matched) return false
+
+        val existing = transactionDao.getByRawSmsId(sms.id)
+        // Already resolved by the user — the pattern still "matched" but must never be touched.
+        if (existing?.status == TransactionStatus.CONFIRMED) return true
+
+        val captured = capturedFields(GeneratedRule(rule.pattern, decodeFieldMap(rule.fieldMap)), match.result)
+        val amount = captured["amount"]?.let { Paise.fromRupeeString(it)?.value }
+        val direction = rule.txnType.toParserDirectionOrNull()
+        val now = System.currentTimeMillis()
+        parserRuleDao.update(rule.copy(matchCount = rule.matchCount + 1, updatedAt = now))
+        if (amount == null || direction == null) return false
+
+        val extraction = GenericExtractor.extract(sms.body, sms.receivedAt)
+        val account = resolveAccount(sender, extraction)
+        if (account == null) {
+            markTerminal(sms, institution, ParseClass.TRANSACTION, ParseStatus.REVIEW, rule.id)
+            return true
+        }
+
+        val merchant = captured["merchant"] ?: extraction.merchant.value
+        val occurredAt = extraction.occurredAt.value ?: sms.receivedAt
+        val balanceAfter = captured["balanceAfter"]?.let { Paise.fromRupeeString(it)?.value } ?: extraction.balanceAfter.value
+
+        val reconciliation = balanceAfter?.let { transactionReconciler.reconcile(account.id, occurredAt, amount, direction, it) }
+        val status = if (reconciliation is ReconciliationResult.Mismatch) TransactionStatus.PENDING_REVIEW else TransactionStatus.CONFIRMED
+
+        writeRuleTransaction(sms, existing, account, amount, direction.toEntityDirection(), merchant, occurredAt, balanceAfter, status)
+        if (reconciliation is ReconciliationResult.Confirmed) reanchorAccount(account, reconciliation.newBalance, occurredAt)
+
+        val terminalStatus = if (status == TransactionStatus.CONFIRMED) ParseStatus.PARSED else ParseStatus.REVIEW
+        markTerminal(sms, institution, ParseClass.TRANSACTION, terminalStatus, rule.id)
+        return true
     }
 
     private suspend fun ensureSenderRegistered(rawSender: String, institution: String): SenderRegistry {
@@ -122,7 +212,7 @@ class SmsParsingPipeline @Inject constructor(
         return sender.accountId?.let { accountDao.getById(it) }
     }
 
-    private suspend fun writeTransaction(
+    private suspend fun writeGenericTransaction(
         sms: RawSms,
         account: Account,
         extraction: GenericExtraction,
@@ -153,16 +243,101 @@ class SmsParsingPipeline @Inject constructor(
         )
     }
 
-    private suspend fun markTerminal(sms: RawSms, institution: String, parseClass: ParseClass, status: ParseStatus) {
+    /** Inserts a fresh Tier-1 transaction, or updates a Tier-2 suggestion the rule now supersedes. */
+    @Suppress("LongParameterList") // one field per typed value the rule/reconciliation actually produced
+    private suspend fun writeRuleTransaction(
+        sms: RawSms,
+        existing: Transaction?,
+        account: Account,
+        amount: Long,
+        direction: EntityDirection,
+        merchant: String?,
+        occurredAt: Long,
+        balanceAfter: Long?,
+        status: TransactionStatus,
+    ) {
+        val now = System.currentTimeMillis()
+        if (existing != null) {
+            transactionDao.update(
+                existing.copy(
+                    accountId = account.id,
+                    amount = amount,
+                    direction = direction,
+                    occurredAt = occurredAt,
+                    merchantRaw = merchant,
+                    balanceAfter = balanceAfter,
+                    source = TransactionSource.SMS_RULE,
+                    status = status,
+                    updatedAt = now,
+                ),
+            )
+            return
+        }
+        transactionDao.insert(
+            Transaction(
+                id = UUID.randomUUID().toString(),
+                accountId = account.id,
+                amount = amount,
+                direction = direction,
+                occurredAt = occurredAt,
+                merchantRaw = merchant,
+                balanceAfter = balanceAfter,
+                rawSmsId = sms.id,
+                source = TransactionSource.SMS_RULE,
+                status = status,
+                transferId = null,
+                isInternal = false,
+                notes = null,
+                createdAt = now,
+                updatedAt = now,
+                deletedAt = null,
+            ),
+        )
+    }
+
+    /** docs/corpus-findings.md §2: "each successful reconciliation re-anchors the account." */
+    private suspend fun reanchorAccount(account: Account, newBalance: Long, asOf: Long) {
+        if (asOf < account.balanceAsOf) return // an out-of-order older message must not regress the cache
+        val now = System.currentTimeMillis()
+        balanceAnchorDao.insert(
+            BalanceAnchor(
+                id = UUID.randomUUID().toString(),
+                accountId = account.id,
+                balance = newBalance,
+                asOf = asOf,
+                source = BalanceAnchorSource.SMS_DERIVED,
+                note = null,
+                createdAt = now,
+                updatedAt = now,
+                deletedAt = null,
+            ),
+        )
+        accountDao.update(account.copy(currentBalance = newBalance, balanceAsOf = asOf, updatedAt = now))
+    }
+
+    private suspend fun markTerminal(
+        sms: RawSms,
+        institution: String,
+        parseClass: ParseClass,
+        status: ParseStatus,
+        matchedRuleId: String? = null,
+    ) {
         rawSmsDao.update(
             sms.copy(
                 institution = institution,
                 parseStatus = status,
                 parseClass = parseClass.toEntityParseClass(),
+                matchedRuleId = matchedRuleId ?: sms.matchedRuleId,
                 updatedAt = System.currentTimeMillis(),
             ),
         )
     }
+}
+
+private fun ParserTxnType.toParserDirectionOrNull(): ParserDirection? = when (this) {
+    ParserTxnType.DEBIT -> ParserDirection.DEBIT
+    ParserTxnType.CREDIT -> ParserDirection.CREDIT
+    ParserTxnType.CARD_SPEND, ParserTxnType.CARD_PAYMENT, ParserTxnType.STATEMENT, ParserTxnType.TRANSFER -> null
 }
 
 private fun ParseClass.toEntityParseClass(): EntityParseClass = when (this) {
