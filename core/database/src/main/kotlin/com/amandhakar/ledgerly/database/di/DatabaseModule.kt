@@ -25,6 +25,7 @@ object DatabaseModule {
 
     @Provides
     @Singleton
+    @Suppress("SpreadOperator") // ALL_MIGRATIONS is a handful of entries; called once at app startup
     fun provideDatabase(@ApplicationContext context: Context): LedgerlyDatabase =
         Room.databaseBuilder(context, LedgerlyDatabase::class.java, LedgerlyDatabase.DATABASE_NAME)
             .addMigrations(*ALL_MIGRATIONS)
