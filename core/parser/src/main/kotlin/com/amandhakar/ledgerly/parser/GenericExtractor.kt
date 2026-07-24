@@ -95,7 +95,12 @@ object GenericExtractor {
             .mapNotNull { m ->
                 val numberGroup = m.groups[2] ?: return@mapNotNull null
                 val text = (m.groups[1]?.value.orEmpty()) + numberGroup.value + (m.groups[3]?.value.orEmpty())
-                toAmountMatch(text, m.groups[1]?.value, m.range)
+                // The span must be just the digits, not the whole match (including the "Rs."
+                // prefix) - Task 1.7's generateRule only generalises a span into a numeric capture
+                // group when its text is digits-only; a span that drags in the currency prefix
+                // silently falls back to an escaped literal, baking one specific amount into the
+                // rule forever instead of a pattern that matches any amount.
+                toAmountMatch(text, m.groups[1]?.value, numberGroup.range)
             }
             .toList()
         if (candidates.isNotEmpty()) return candidates.first()

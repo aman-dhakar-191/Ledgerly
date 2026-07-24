@@ -53,6 +53,7 @@ class ReviewConfirmationServiceTest {
             db.parserRuleDao(),
             db.goldenTestDao(),
             db.transactionAuditDao(),
+            db.payeeAllowlistDao(),
             pipeline,
         )
     }
