@@ -4,6 +4,13 @@
 style:
   MagicNumber:
     active: false # money/timestamp/crypto constants are pervasive and self-explanatory in context
+  MaxLineLength:
+    maxLineLength: 140
+    excludeCommentStatements: true
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable'] # PascalCase is the Compose convention, not a naming violation
 
 complexity:
   TooManyFunctions:

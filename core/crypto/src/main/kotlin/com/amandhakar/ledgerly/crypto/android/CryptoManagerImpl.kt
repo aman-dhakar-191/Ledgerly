@@ -16,7 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val CURRENT_SCHEMA_VERSION = 1
-private val PASSPHRASE_REPROMPT_INTERVAL_MILLIS = 30L * 24 * 60 * 60 * 1000
+private const val PASSPHRASE_REPROMPT_INTERVAL_MILLIS = 30L * 24 * 60 * 60 * 1000
 
 @Singleton
 class CryptoManagerImpl @Inject constructor(
@@ -118,13 +118,13 @@ class CryptoManagerImpl @Inject constructor(
     }
 
     override suspend fun encrypt(blobId: String, plaintext: ByteArray): EncryptedBlob {
-        val mk = masterKey ?: throw IllegalStateException("locked")
+        val mk = masterKey ?: error("locked")
         val dek = Hkdf.deriveDek(mk, blobId)
         return AeadCipher.encrypt(dek, blobId, CURRENT_SCHEMA_VERSION, plaintext)
     }
 
     override suspend fun decrypt(blobId: String, blob: EncryptedBlob): ByteArray {
-        val mk = masterKey ?: throw IllegalStateException("locked")
+        val mk = masterKey ?: error("locked")
         val dek = Hkdf.deriveDek(mk, blobId)
         return AeadCipher.decrypt(dek, blobId, blob)
     }

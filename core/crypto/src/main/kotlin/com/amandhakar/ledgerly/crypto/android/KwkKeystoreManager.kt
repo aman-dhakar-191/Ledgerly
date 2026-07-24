@@ -33,6 +33,7 @@ internal object KwkKeystoreManager {
     }
 
     /** Generates the KWK if it does not already exist. Retries without StrongBox if unavailable. */
+    @Suppress("SwallowedException") // intentional fallback path, not an error to surface
     fun ensureKeyExists() {
         if (keyExists()) return
         try {
