@@ -41,6 +41,7 @@ class MissedSmsCatchUpWorker(context: Context, params: WorkerParameters) : Corou
         val entry = EntryPointAccessors.fromApplication(applicationContext, Entry::class.java)
         val since = entry.lastProcessedStore().getLastProcessedAt() ?: return Result.success()
         entry.archiveImporter().importSince(since)
+        SmsParsingWorker.enqueue(applicationContext)
         return Result.success()
     }
 

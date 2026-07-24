@@ -121,4 +121,38 @@ class MigrationTest {
             assertThat(cursor.getString(cursor.getColumnIndexOrThrow("pattern"))).isEqualTo("Rs\\.(\\d+) debited")
         }
     }
+
+    /**
+     * Task 1.13's pipeline needs `raw_sms.institution`/`parse_class` to persist what the pre-filter
+     * and [com.amandhakar.ledgerly.parser.normalizeSender] already computed, rather than recomputing
+     * on every read. Pre-existing rows backfill to the column defaults, same as any other
+     * not-yet-reprocessed archive row.
+     */
+    @Test
+    fun `migrate 3 to 4 adds institution and parse_class to raw_sms, defaulting existing rows`() {
+        helper.createDatabase(testDbName, 3).apply {
+            execSQL(
+                """
+                INSERT INTO raw_sms (
+                    id, sender, body, received_at, subscription_id, dedupe_hash,
+                    parse_status, matched_rule_id, created_at, updated_at, deleted_at
+                ) VALUES (
+                    'sms-1', 'AD-ICICIT-S', 'Rs.500 debited', 1700000000000, 1, 'hash-1',
+                    'UNPROCESSED', NULL, 1700000000000, 1700000000000, NULL
+                )
+                """.trimIndent(),
+            )
+            close()
+        }
+
+        val migrated = helper.runMigrationsAndValidate(testDbName, 4, true, MIGRATION_3_4)
+
+        migrated.query("SELECT * FROM raw_sms WHERE id = 'sms-1'").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getString(cursor.getColumnIndexOrThrow("sender"))).isEqualTo("AD-ICICIT-S")
+            assertThat(cursor.getString(cursor.getColumnIndexOrThrow("institution"))).isEqualTo("")
+            assertThat(cursor.getString(cursor.getColumnIndexOrThrow("parse_class"))).isEqualTo("UNKNOWN")
+            assertThat(cursor.getString(cursor.getColumnIndexOrThrow("parse_status"))).isEqualTo("UNPROCESSED")
+        }
+    }
 }

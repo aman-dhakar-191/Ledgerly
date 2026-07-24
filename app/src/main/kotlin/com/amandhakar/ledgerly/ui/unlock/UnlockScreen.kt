@@ -36,7 +36,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.amandhakar.ledgerly.ingest.LastProcessedStore
 import com.amandhakar.ledgerly.ui.accounts.AccountsScreen
+import com.amandhakar.ledgerly.ui.export.DataExportScreen
 import com.amandhakar.ledgerly.ui.initialization.InitializationScreen
+import com.amandhakar.ledgerly.ui.ledger.LedgerScreen
+import com.amandhakar.ledgerly.ui.review.ReviewInboxScreen
+import com.amandhakar.ledgerly.ui.senders.SenderClassificationScreen
 import com.amandhakar.ledgerly.ui.sms.SmsPermissionScreen
 import com.amandhakar.ledgerly.ui.update.UpdateScreen
 import java.time.Instant
@@ -97,6 +101,10 @@ private fun HomeScreen(openUpdate: Boolean) {
     var showSmsPermissionScreen by remember { mutableStateOf(false) }
     var showAccountsScreen by remember { mutableStateOf(false) }
     var showInitializationScreen by remember { mutableStateOf(false) }
+    var showSenderClassificationScreen by remember { mutableStateOf(false) }
+    var showReviewInboxScreen by remember { mutableStateOf(false) }
+    var showLedgerScreen by remember { mutableStateOf(false) }
+    var showDataExportScreen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     var lastProcessedAt by remember { mutableStateOf<Long?>(null) }
 
@@ -116,16 +124,28 @@ private fun HomeScreen(openUpdate: Boolean) {
         AccountsScreen(onBack = { showAccountsScreen = false })
     } else if (showInitializationScreen) {
         InitializationScreen(onBack = { showInitializationScreen = false })
+    } else if (showSenderClassificationScreen) {
+        SenderClassificationScreen(onBack = { showSenderClassificationScreen = false })
+    } else if (showReviewInboxScreen) {
+        ReviewInboxScreen(onBack = { showReviewInboxScreen = false })
+    } else if (showLedgerScreen) {
+        LedgerScreen(onBack = { showLedgerScreen = false })
+    } else if (showDataExportScreen) {
+        DataExportScreen(onBack = { showDataExportScreen = false })
     } else {
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Unlocked")
+            Button(onClick = { showLedgerScreen = true }) { Text("Ledger") }
+            Button(onClick = { showDataExportScreen = true }) { Text("Export data") }
             Button(onClick = { showUpdateScreen = true }) { Text("Check for updates") }
             Button(onClick = { showSmsPermissionScreen = true }) { Text("Import transactions from SMS") }
             Button(onClick = { showAccountsScreen = true }) { Text("Accounts") }
             Button(onClick = { showInitializationScreen = true }) { Text("Set up ledger") }
+            Button(onClick = { showSenderClassificationScreen = true }) { Text("Classify senders") }
+            Button(onClick = { showReviewInboxScreen = true }) { Text("Review inbox") }
             Text(
                 "Last SMS processed: ${formatLastProcessed(lastProcessedAt)}",
                 style = MaterialTheme.typography.bodySmall,

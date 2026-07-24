@@ -34,6 +34,7 @@ class ArchiveImportWorker(context: Context, params: WorkerParameters) : Coroutin
         importer.importAll { imported, total ->
             setProgress(workDataOf(KEY_IMPORTED to imported, KEY_TOTAL to total))
         }
+        SmsParsingWorker.enqueue(applicationContext)
         return Result.success()
     }
 

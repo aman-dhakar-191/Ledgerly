@@ -11,10 +11,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * Task 1.1. Does no parsing (docs/parser.md) — a multi-part SMS's fragments are joined back into
- * one body and handed to [RawSmsArchiver]. Nothing past that: the actual pre-filter/rule-engine
- * pipeline runs later, out of band, over `RawSms.parse_status == UNPROCESSED` (Task 1.7 onward
- * isn't wired to Room yet, so there's no follow-up work to enqueue here today).
+ * Task 1.1. Does no parsing itself (docs/parser.md) — a multi-part SMS's fragments are joined back
+ * into one body and handed to [RawSmsArchiver]; [SmsParsingWorker] is what actually runs the
+ * pre-filter/rule-engine pipeline over `RawSms.parse_status == UNPROCESSED`, out of band.
  *
  * `goAsync()` is required — `onReceive` normally must return almost immediately, but the Room
  * insert is a suspend call. Android gives a `PendingResult` a short grace window (state-dependent,
@@ -43,6 +42,7 @@ class SmsReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 archiver.archive(sender, receivedAt, subscriptionId, body)
+                SmsParsingWorker.enqueue(context)
             } finally {
                 pendingResult.finish()
             }

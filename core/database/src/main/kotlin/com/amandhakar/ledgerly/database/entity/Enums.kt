@@ -2,6 +2,23 @@ package com.amandhakar.ledgerly.database.entity
 
 enum class ParseStatus { UNPROCESSED, PARSED, REVIEW, IGNORED, FAILED }
 
+/**
+ * Mirrors [com.amandhakar.ledgerly.parser.ParseClass] — duplicated rather than depending on
+ * `:core:parser` from `:core:database`, same as [Direction] below; the pipeline in `:app` converts
+ * between the two at the seam (docs/schema.md's `raw_sms.parse_class`).
+ */
+enum class ParseClass {
+    TRANSACTION,
+    OTP,
+    DECLINED,
+    SI_UPCOMING,
+    SI_FAILED,
+    AUTOPAY_SCHEDULED,
+    COLLECT_REQUEST,
+    PROMO,
+    UNKNOWN,
+}
+
 enum class SenderType { BANK, CARD, OTP, PROMO, SPAM, UNKNOWN }
 
 enum class ParserTxnType { DEBIT, CREDIT, CARD_SPEND, CARD_PAYMENT, STATEMENT, TRANSFER }
