@@ -40,7 +40,7 @@ class ReviewInboxViewModel @Inject constructor(
         viewModelScope.launch {
             transactionDao.observeByStatus(TransactionStatus.PENDING_REVIEW).collect { transactions ->
                 _uiState.value = ReviewInboxUiState(
-                    transactions.sortedByDescending { it.occurredAt }.map(::toReviewItem),
+                    transactions.sortedByDescending { it.occurredAt }.map { toReviewItem(it) },
                 )
             }
         }

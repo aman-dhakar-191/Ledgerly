@@ -33,24 +33,10 @@ jobs:
       - name: Run detekt
         run: ./gradlew detekt --stacktrace
 
-      # TEMP: same class of bug as before (v3) - Gradle's persisted CI build cache can restore a
-      # stale/corrupt schemas/.../4.json for :core:database:kspDebugKotlin's declared output,
-      # which crashes Room's own exportSchema validation ("Empty schema file") before tests even
-      # run. --rerun-tasks forces a genuine fresh KSP pass. Remove once 4.json is committed.
-      - name: Force-regenerate Room schema export
-        run: ./gradlew :core:database:kspDebugKotlin --rerun-tasks --stacktrace
-
       # Gates everything below. Crypto, money-type, reconciliation and
       # golden-test failures must never produce an installable APK.
       - name: Run unit tests
         run: ./gradlew test --stacktrace
-
-      # TEMP: prints the freshly KSP-exported v4 schema so it can be extracted from the job log and
-      # committed for real (no network path to download artifact zips in this sandbox). Remove once
-      # core/database/schemas/.../4.json is committed.
-      - name: Print v4 schema export
-        if: always()
-        run: cat core/database/schemas/com.amandhakar.ledgerly.database.LedgerlyDatabase/4.json || true
 
       - name: Upload Room schema export
         uses: actions/upload-artifact@v4
