@@ -1,22 +1,15 @@
-// Every "org.jetbrains.kotlin.*" plugin used anywhere in the project is declared here with
-// `apply false`, even kotlin-android/kotlin-compose which only Android modules actually apply.
-// They all resolve to the same underlying Kotlin Gradle Plugin jar; declaring only a subset (e.g.
-// just kotlin.jvm, for the pure-Kotlin modules) causes it to be loaded once from here and once
-// again per-subproject with an explicit version, which Gradle rejects with "plugin is already on
-// the classpath with an unknown version, so compatibility cannot be checked." None of these
-// plugin IDs need AGP to resolve — just the Kotlin Gradle Plugin artifact (Maven Central) — so
-// this doesn't reintroduce the AGP problem below.
+// Intentionally empty: each subproject declares its own plugins with explicit versions (rather
+// than the root `apply false` convention) so that building a single pure-Kotlin module (e.g.
+// :core:model) does not force configuration — and therefore plugin resolution — of the Android
+// modules alongside it, and AGP cannot be resolved in this sandbox (network access to Google's
+// Maven host is blocked).
 //
-// The Android plugins themselves (com.android.application, com.android.library) and ksp/hilt
-// deliberately stay OUT of this file and are declared directly, with explicit versions, in each
-// Android module's own build.gradle.kts — putting them here would force root-project
-// configuration to resolve AGP even when building only a pure-Kotlin module, and AGP cannot be
-// resolved in this sandbox (network access to Google's Maven host is blocked; see the crypto
-// commit for details). CI (real network/SDK) doesn't have that constraint.
-plugins {
-    alias(libs.plugins.kotlin.jvm) apply false
-    alias(libs.plugins.kotlin.android) apply false
-    alias(libs.plugins.kotlin.compose) apply false
-    alias(libs.plugins.kotlin.serialization) apply false
-    alias(libs.plugins.detekt) apply false
-}
+// Declaring any org.jetbrains.kotlin.* plugin here as `apply false` looks like the right fix for
+// Gradle's "Kotlin Gradle plugin was loaded multiple times" warning, but it isn't: the first real
+// CI run showed that root pre-loading kotlin.jvm collides with :app's explicit-version
+// kotlin.android declaration ("plugin is already on the classpath with an unknown version"), and
+// pre-loading kotlin.android itself at root fails a different way — it eagerly instantiates
+// KotlinAndroidTarget, which needs AGP classes that don't exist in root's own classpath since
+// root itself never applies com.android.*, so it dies with
+// `NoClassDefFoundError: com/android/build/gradle/api/BaseVariant`. The duplicate-plugin-load
+// warning is cosmetic; both of those failures are not. Leave this file alone.
