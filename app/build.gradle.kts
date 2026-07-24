@@ -1,3 +1,8 @@
+// Read by name (not evaluated) by docs/ci.md's CI workflow via `grep`, to tag release
+// artifacts/GitHub Releases without needing the workflow to invoke Gradle for it.
+val appVersionName = "0.1.0"
+val appVersionCode = 1
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -20,8 +25,8 @@ android {
         applicationId = "com.amandhakar.ledgerly"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

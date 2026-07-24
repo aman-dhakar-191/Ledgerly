@@ -29,15 +29,11 @@ import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 
-/**
- * The recovery warning text (docs/crypto.md) must be shown verbatim and cannot be skipped —
- * "Anthropic" appearing here (rather than a name specific to this app/developer) is exactly what
- * the doc specifies; flagged for the user to confirm rather than silently corrected, since
- * docs/crypto.md requires asking before any change to its content.
- */
-private const val RECOVERY_WARNING = "Your passphrase is the only way to recover your data. " +
-    "Anthropic, Google, and this app cannot reset it. If you lose both your passphrase and this " +
-    "device, your backups are permanently unreadable. Write it down and store it somewhere physical."
+/** Must be shown verbatim (docs/crypto.md) and cannot be skipped. */
+private const val RECOVERY_WARNING = "Your passphrase is the only way to recover your data. It " +
+    "cannot be reset — not by Google, not by this app, not by anyone. If you lose both your " +
+    "passphrase and this device, your backups are permanently unreadable. Write it down and " +
+    "store it somewhere physical."
 
 @Composable
 fun UnlockScreen(activity: FragmentActivity, viewModel: UnlockViewModel = hiltViewModel()) {
