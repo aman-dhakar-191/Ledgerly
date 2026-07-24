@@ -15,10 +15,52 @@ Detail: `tasks/phase-0.md`
 
 ---
 
+## Initialization — how the system starts (Phase 1)
+
+Two separate dates. Conflating them is a mistake.
+
+| | Purpose | How far back |
+|---|---|---|
+| **Archive import date** | validation corpus for rule generation | as far back as the inbox goes |
+| **Ledger start date** | first date transactions enter the ledger | a month boundary, 3–6 months back |
+
+Messages between the archive date and the ledger start date are stored as
+`RawSms` and used to generate and validate parser rules. They never become
+transactions. Raw text is cheap; more corpus means better rules.
+
+**Why a ledger start date is needed at all:** a ledger requires an opening
+balance. Without one, every computed balance is off by an unknown constant and
+reconciliation fails on every message. The start date is where a known anchor
+exists — not a way to limit message volume.
+
+### Setup sequence
+
+```
+1. Import the full SMS archive as RawSms (no parsing yet)
+2. User picks ledger_start_date (default: first day of the month, 3 months back)
+3. Detect accounts from senders in the archive
+4. For each account, find the earliest message at/after ledger_start_date
+   carrying a balance, and pre-fill a BalanceAnchor (source = SMS_DERIVED)
+5. User confirms or overrides each anchor (override -> source = OPENING)
+6. Parse forward from ledger_start_date, reconciling against the anchors
+```
+
+Step 4 matters: most Indian bank SMS carry `Avl Bal`, so the opening balance
+usually comes from the bank rather than the user's memory. Confirmation is a
+couple of taps. Manual entry remains available and is authoritative when used.
+
+### Drift afterwards
+
+Reconciliation failure offers a new `BalanceAnchor` at that point. Same entity,
+same code path as the opening balance. Anchors reset forward drift; they do not
+repair the window behind them, which must be marked lower-confidence in the UI.
+
+---
+
 ## Phase 1 — Ledger that works
 SMS receiver, sender registry, generic extractor, rule learning + validation,
-review inbox, accounts, transactions, reconciliation, golden tests, bootstrap
-import of existing inbox.
+review inbox, accounts, transactions, balance anchors, initialization flow,
+reconciliation, golden tests, bootstrap import of existing inbox.
 
 **Exit: live on it for two weeks.** Every real SMS either parses correctly or
 appears in review. Zero silent wrong entries. If the parser can't survive this,
