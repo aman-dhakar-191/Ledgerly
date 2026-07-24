@@ -4,7 +4,6 @@ import android.database.sqlite.SQLiteConstraintException
 import com.amandhakar.ledgerly.database.LedgerlyDatabase
 import com.amandhakar.ledgerly.database.RoomTestDatabase
 import com.amandhakar.ledgerly.database.testAccount
-import com.amandhakar.ledgerly.model.money.Paise
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -130,11 +129,11 @@ class EntityRoundTripTest {
         val transaction = Transaction(
             id = "txn-1",
             accountId = account.id,
-            amount = Paise(50_000),
+            amount = 50_000L,
             direction = Direction.DEBIT,
             occurredAt = now,
             merchantRaw = "Swiggy",
-            balanceAfter = Paise(50_000),
+            balanceAfter = 50_000L,
             rawSmsId = null,
             source = TransactionSource.MANUAL,
             status = TransactionStatus.CONFIRMED,
@@ -180,7 +179,7 @@ class EntityRoundTripTest {
         val anchor = BalanceAnchor(
             id = "anchor-1",
             accountId = account.id,
-            balance = Paise(100_000),
+            balance = 100_000L,
             asOf = now,
             source = BalanceAnchorSource.OPENING,
             note = "Opening balance from statement",
@@ -210,11 +209,11 @@ fun rawSms(id: String, dedupeHash: String, now: Long = 1_700_000_000_000L) = Raw
 fun testTransaction(accountId: String, id: String = "txn-1", now: Long = 1_700_000_000_000L) = Transaction(
     id = id,
     accountId = accountId,
-    amount = Paise(50_000),
+    amount = 50_000L,
     direction = Direction.DEBIT,
     occurredAt = now,
     merchantRaw = "Swiggy",
-    balanceAfter = Paise(50_000),
+    balanceAfter = 50_000L,
     rawSmsId = null,
     source = TransactionSource.MANUAL,
     status = TransactionStatus.CONFIRMED,

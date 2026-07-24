@@ -5,13 +5,15 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import com.amandhakar.ledgerly.model.money.Paise
 
 /**
  * `merchant_normalized` and `category_id` (docs/schema.md, tagged Phase 3) are deliberately not
  * columns yet, per "do not build ahead" (docs/phases.md). `schemaDemoNote` exists purely as
  * Task 0.7's worked Migration(1,2) example (a placeholder, not a product field) and should be
  * replaced by the real Phase 3 migration when those columns actually land.
+ *
+ * Money fields are `Long` paise directly, not the `Paise` value class — see Account.kt's class
+ * doc for why (a cross-module Room/KSP value-class crash, not a design preference).
  */
 @Entity(
     tableName = "transaction_entity",
@@ -33,11 +35,11 @@ data class Transaction(
     @PrimaryKey val id: String,
     @ColumnInfo(name = "account_id") val accountId: String,
     /** Always positive; direction carries the sign. */
-    val amount: Paise,
+    val amount: Long,
     val direction: Direction,
     @ColumnInfo(name = "occurred_at") val occurredAt: Long,
     @ColumnInfo(name = "merchant_raw") val merchantRaw: String?,
-    @ColumnInfo(name = "balance_after") val balanceAfter: Paise?,
+    @ColumnInfo(name = "balance_after") val balanceAfter: Long?,
     @ColumnInfo(name = "raw_sms_id") val rawSmsId: String?,
     val source: TransactionSource,
     val status: TransactionStatus,

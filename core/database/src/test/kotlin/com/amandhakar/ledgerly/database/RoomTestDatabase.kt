@@ -16,7 +16,7 @@ object RoomTestDatabase {
 fun testAccount(
     id: String = "acct-1",
     now: Long = 1_700_000_000_000L,
-    currentBalance: com.amandhakar.ledgerly.model.money.Paise = com.amandhakar.ledgerly.model.money.Paise(100_000),
+    currentBalance: Long = 100_000L,
     deletedAt: Long? = null,
 ): Account = Account(
     id = id,

@@ -14,7 +14,6 @@ import com.amandhakar.ledgerly.database.entity.AuditReason
 import com.amandhakar.ledgerly.database.entity.rawSms
 import com.amandhakar.ledgerly.database.entity.testTransaction
 import com.amandhakar.ledgerly.database.testAccount
-import com.amandhakar.ledgerly.model.money.Paise
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -133,7 +132,7 @@ class SoftDeleteTest {
     fun `BalanceAnchor soft delete excludes from observeForAccount and getLatestAtOrBefore`() = runTest {
         val account = testAccount()
         db.accountDao().insert(account)
-        val anchor = BalanceAnchor("anchor-1", account.id, Paise(100_000), now, BalanceAnchorSource.OPENING, null, now, now, null)
+        val anchor = BalanceAnchor("anchor-1", account.id, 100_000L, now, BalanceAnchorSource.OPENING, null, now, now, null)
         db.balanceAnchorDao().insert(anchor)
         db.balanceAnchorDao().softDelete("anchor-1", now)
 

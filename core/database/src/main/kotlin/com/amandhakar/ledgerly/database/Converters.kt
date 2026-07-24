@@ -10,13 +10,14 @@ import com.amandhakar.ledgerly.database.entity.ParserTxnType
 import com.amandhakar.ledgerly.database.entity.SenderType
 import com.amandhakar.ledgerly.database.entity.TransactionSource
 import com.amandhakar.ledgerly.database.entity.TransactionStatus
-import com.amandhakar.ledgerly.model.money.Paise
 
-/** Money is never Double/Float/BigDecimal in storage — Paise round-trips to a plain Long column. */
+/**
+ * Money is never Double/Float/BigDecimal in storage — entities store plain `Long` paise columns
+ * directly rather than the `Paise` value class, because Room's KSP processor cannot reliably
+ * inspect a value class declared in a different Gradle module than the one processing it (see
+ * Account.kt's class doc). Wrap with `Paise(...)` at the call site instead of a TypeConverter.
+ */
 class Converters {
-    @TypeConverter fun paiseToLong(value: Paise): Long = value.value
-    @TypeConverter fun longToPaise(value: Long): Paise = Paise(value)
-
     @TypeConverter fun parseStatusToString(value: ParseStatus): String = value.name
     @TypeConverter fun stringToParseStatus(value: String): ParseStatus = ParseStatus.valueOf(value)
 
