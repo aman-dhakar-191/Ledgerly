@@ -81,4 +81,17 @@ class UnlockViewModel @Inject constructor(
                 }
         }
     }
+
+    /**
+     * Call on every `ON_RESUME`. `CryptoManagerImpl.lock()` zeroes the in-memory master key on
+     * background (ProcessLifecycleOwner.onStop), but nothing about that touches this ViewModel's
+     * state — without this check, resuming from background just kept showing [UnlockUiState.Unlocked]
+     * even though the app was actually locked underneath, since state here is otherwise only ever
+     * set by an explicit setup/unlock call succeeding.
+     */
+    fun refreshLockState() {
+        if (_uiState.value is UnlockUiState.Unlocked && !cryptoManager.isUnlocked()) {
+            _uiState.value = UnlockUiState.NeedsUnlock()
+        }
+    }
 }
