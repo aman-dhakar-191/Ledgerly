@@ -45,6 +45,7 @@ cloud backup.
 :app                  Compose UI, DI wiring
 :core:model           Paise, entities, blob serializer   [pure Kotlin]
 :core:crypto-engine   Argon2id, HKDF, AES-GCM            [pure Kotlin]
+:core:parser          Generic extractor, rule engine     [pure Kotlin]
 :core:crypto          Keystore, BiometricPrompt          [Android]
 :core:database        Room, DAOs, migrations             [Android]
 ```
@@ -111,7 +112,7 @@ These are not preferences. Violating any of them is a bug.
 11. **The release signing keystore must never change.** Android treats a
     differently signed APK as a different app: update fails, and uninstalling to
     fix it destroys app-private storage including the Keystore-wrapped master
-    key. Back up `release.keystore.jks` and its passwords offline.
+    key. Rotation is effectively impossible. See `docs/signing.md`.
 
 12. **No financial data in notifications.** Amounts, balances, merchants and
     account numbers never appear in a notification, at any priority. Lock-screen
@@ -146,10 +147,14 @@ Stop and ask the user before:
 
 ## Current phase
 
-**Phase 0 — Foundation.** See `tasks/phase-0.md`.
+**Phase 1 — Ledger that works.** See `tasks/phase-1.md`.
 
-Out of scope right now: UI beyond what tests need, SMS receiving, budgets,
-investments, sync, LLM anything.
+Phase 0 complete: all CI-verifiable criteria green. Device-only items (Keystore
+hardware backing, biometric flows, Argon2id timing on-phone) still outstanding —
+verify on a real device but they do not block Phase 1.
+
+Out of scope right now: transfers, card liability, categories, budgets,
+investments, Firestore sync, LLM anything.
 
 ---
 
@@ -160,7 +165,9 @@ investments, sync, LLM anything.
 | `docs/schema.md` | Entities, fields, relationships |
 | `docs/crypto.md` | Key hierarchy, blob format, biometric unlock |
 | `docs/parser.md` | Rule format, learning flow, classification |
+| `docs/corpus-findings.md` | Real SMS formats and what they break |
 | `docs/ci.md` | GitHub Actions, signing, in-app updates |
+| `docs/signing.md` | Keystore generation, backup, rotation limits |
 | `docs/phases.md` | Full roadmap |
 
 ---
