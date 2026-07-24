@@ -25,6 +25,7 @@ class SmsReceiver : BroadcastReceiver() {
 
     @Inject lateinit var archiver: RawSmsArchiver
 
+    @Suppress("ReturnCount") // guard-clause style is clearer than nesting here
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
 

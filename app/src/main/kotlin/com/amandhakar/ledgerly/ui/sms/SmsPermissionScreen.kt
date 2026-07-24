@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.amandhakar.ledgerly.ingest.ArchiveImportWorker
 
 private const val RATIONALE = "Ledgerly reads your bank and card SMS to build your ledger " +
     "automatically. Messages are processed entirely on this device and never leave it. " +
@@ -41,13 +42,21 @@ fun SmsPermissionScreen(onDone: () -> Unit) {
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
     ) { results ->
-        if (results.values.all { it }) onDone() else deniedOnce = true
+        if (results.values.all { it }) {
+            ArchiveImportWorker.enqueue(context)
+            onDone()
+        } else {
+            deniedOnce = true
+        }
     }
 
     LaunchedEffect(Unit) {
         val alreadyGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) ==
             PackageManager.PERMISSION_GRANTED
-        if (alreadyGranted) onDone()
+        if (alreadyGranted) {
+            ArchiveImportWorker.enqueue(context)
+            onDone()
+        }
     }
 
     Column(
