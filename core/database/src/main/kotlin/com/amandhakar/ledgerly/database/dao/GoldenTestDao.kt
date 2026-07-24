@@ -12,6 +12,10 @@ interface GoldenTestDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(goldenTest: GoldenTest): Long
 
+    /** Import (Task 1.14): re-importing the same exported file must not duplicate rows. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIgnoringConflicts(goldenTest: GoldenTest): Long
+
     @Query("SELECT * FROM golden_test WHERE deleted_at IS NULL")
     fun observeAll(): Flow<List<GoldenTest>>
 
