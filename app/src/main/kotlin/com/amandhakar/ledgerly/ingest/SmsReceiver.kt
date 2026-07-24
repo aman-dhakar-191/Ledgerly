@@ -34,7 +34,9 @@ class SmsReceiver : BroadcastReceiver() {
 
         val sender = messages[0].originatingAddress ?: return
         val receivedAt = messages[0].timestampMillis
-        val subscriptionId = runCatching { messages[0].subscriptionId }.getOrNull()
+        // SmsMessage carries no subscription info of its own on a multi-SIM device — it's an
+        // extra on the broadcast Intent itself.
+        val subscriptionId = intent.getIntExtra("subscription", -1).takeIf { it != -1 }
         val body = messages.joinToString(separator = "") { it.messageBody.orEmpty() }
 
         val pendingResult = goAsync()
