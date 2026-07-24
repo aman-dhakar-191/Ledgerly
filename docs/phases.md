@@ -62,6 +62,9 @@ SMS receiver, sender registry, generic extractor, rule learning + validation,
 review inbox, accounts, transactions, balance anchors, initialization flow,
 reconciliation, golden tests, bootstrap import of existing inbox.
 
+Also in Phase 1: the in-app update system (`tasks/update-system.md`). Needed
+early because sideloaded builds are how every later phase reaches the device.
+
 **Exit: live on it for two weeks.** Every real SMS either parses correctly or
 appears in review. Zero silent wrong entries. If the parser can't survive this,
 nothing downstream matters.
