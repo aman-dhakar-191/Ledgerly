@@ -52,5 +52,13 @@ abstract class LedgerlyDatabase : RoomDatabase() {
 
     companion object {
         const val DATABASE_NAME = "ledgerly.db"
+
+        /**
+         * Kept in sync with `version` above by hand rather than read via reflection — the update
+         * screen's schema-migration guard (tasks/update-system.md) needs the *running* app's
+         * schema version as a plain constant, not the `@Database` annotation on the class it's
+         * currently running.
+         */
+        const val SCHEMA_VERSION = 3
     }
 }

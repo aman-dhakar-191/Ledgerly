@@ -33,6 +33,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.amandhakar.ledgerly.ui.update.UpdateScreen
 
 /** Must be shown verbatim (docs/crypto.md) and cannot be skipped. */
 private const val RECOVERY_WARNING = "Your passphrase is the only way to recover your data. It " +
@@ -41,7 +42,11 @@ private const val RECOVERY_WARNING = "Your passphrase is the only way to recover
     "store it somewhere physical."
 
 @Composable
-fun UnlockScreen(activity: FragmentActivity, viewModel: UnlockViewModel = hiltViewModel()) {
+fun UnlockScreen(
+    activity: FragmentActivity,
+    openUpdate: Boolean = false,
+    viewModel: UnlockViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsState()
 
     // CryptoManagerImpl.lock() zeroes the master key on background (ProcessLifecycleOwner.onStop),
@@ -68,7 +73,29 @@ fun UnlockScreen(activity: FragmentActivity, viewModel: UnlockViewModel = hiltVi
                 passphraseReentryRequired = current.passphraseReentryRequired,
                 viewModel = viewModel,
             )
-            is UnlockUiState.Unlocked -> Text("Unlocked", modifier = Modifier.padding(24.dp))
+            is UnlockUiState.Unlocked -> HomeScreen(openUpdate = openUpdate)
+        }
+    }
+}
+
+/**
+ * Placeholder home — Task 1.15 builds the real ledger UI. The only thing that lives here today is
+ * the entry point into the dedicated update screen (Task 1.3), reached either by tapping "Check
+ * for updates" or by tapping an update-available notification (`openUpdate`).
+ */
+@Composable
+private fun HomeScreen(openUpdate: Boolean) {
+    var showUpdateScreen by remember { mutableStateOf(openUpdate) }
+
+    if (showUpdateScreen) {
+        UpdateScreen(onBack = { showUpdateScreen = false })
+    } else {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Unlocked")
+            Button(onClick = { showUpdateScreen = true }) { Text("Check for updates") }
         }
     }
 }

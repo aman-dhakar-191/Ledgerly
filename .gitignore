@@ -11,3 +11,8 @@ build/
 *.apk
 *.aab
 google-services.json
+
+# docs/signing.md: the release keystore must never enter the repository.
+*.jks
+*.keystore
+*.b64

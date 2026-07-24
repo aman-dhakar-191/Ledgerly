@@ -18,8 +18,14 @@ class UnlockActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
 
+        val openUpdate = intent.getBooleanExtra(EXTRA_OPEN_UPDATE, false)
         setContent {
-            UnlockScreen(activity = this)
+            UnlockScreen(activity = this, openUpdate = openUpdate)
         }
+    }
+
+    companion object {
+        /** Set by [com.amandhakar.ledgerly.update.UpdateCheckWorker]'s notification tap intent. */
+        const val EXTRA_OPEN_UPDATE = "com.amandhakar.ledgerly.extra.OPEN_UPDATE"
     }
 }
