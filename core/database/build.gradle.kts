@@ -25,6 +25,13 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
     }
+
+    // MigrationTestHelper reads exported Room schemas (see the ksp { } block below) as an asset.
+    sourceSets {
+        getByName("test") {
+            assets.srcDirs("$projectDir/schemas")
+        }
+    }
 }
 
 ksp {
@@ -41,12 +48,16 @@ dependencies {
     ksp(libs.room.compiler)
     implementation(libs.kotlinx.serialization.json)
 
-    testImplementation(libs.junit5.api)
-    testRuntimeOnly(libs.junit5.engine)
-    testImplementation(libs.junit5.params)
+    // Every test in this module builds a Room database, which needs an Android Context even for
+    // "unit" tests — that means Robolectric, which only drives a JUnit4 @RunWith runner. JUnit5's
+    // vintage engine bridges that runner onto the same `useJUnitPlatform()` task the other
+    // modules use (CONTEXT.md's stack lists both JUnit5 and Robolectric; this is how they coexist).
+    testImplementation(libs.junit4)
+    testRuntimeOnly(libs.junit5.vintage.engine)
     testImplementation(libs.truth)
     testImplementation(libs.robolectric)
     testImplementation(libs.room.testing)
+    testImplementation(libs.androidx.test.core)
     testImplementation(libs.turbine)
     testImplementation(libs.kotlinx.coroutines.test)
 

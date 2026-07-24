@@ -3,6 +3,7 @@ package com.amandhakar.ledgerly.model.money
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.Currency
+import kotlinx.serialization.Serializable
 
 /**
  * Money, always as an integer count of paise (1 rupee = 100 paise).
@@ -12,6 +13,7 @@ import java.util.Currency
  * only at the UI edge via [format].
  */
 @JvmInline
+@Serializable
 value class Paise(val value: Long) : Comparable<Paise> {
 
     operator fun plus(other: Paise): Paise = Paise(value + other.value)
