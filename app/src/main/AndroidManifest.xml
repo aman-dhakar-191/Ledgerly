@@ -8,6 +8,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Sideloaded installs go through ACTION_VIEW with an explicit user tap, never silently. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Task 1.1: SMS ingest. Denied is a supported state — the app still works with manual entry. -->
+    <uses-permission android:name="android.permission.RECEIVE_SMS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
 
     <application
         android:name=".app.LedgerlyApplication"
@@ -38,6 +41,17 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Task 1.1: does no parsing (docs/parser.md) — archives RawSms and returns immediately.
+             android:permission restricts delivery to the system's own protected broadcast. -->
+        <receiver
+            android:name=".ingest.SmsReceiver"
+            android:exported="true"
+            android:permission="android.permission.BROADCAST_SMS">
+            <intent-filter>
+                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

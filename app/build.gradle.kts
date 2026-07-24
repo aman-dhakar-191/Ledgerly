@@ -72,6 +72,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:database"))
     implementation(project(":core:crypto"))
+    implementation(project(":core:parser"))
     implementation(project(":core:update"))
 
     implementation(libs.core.ktx)
@@ -100,6 +101,13 @@ dependencies {
     testImplementation(libs.truth)
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)
+    // RawSmsArchiverTest builds a real in-memory Room db (same reasoning as :core:database's own
+    // tests: Room needs Robolectric's Android Context, which only drives a JUnit4 @RunWith runner —
+    // the vintage engine bridges that onto this module's useJUnitPlatform() task).
+    testImplementation(libs.junit4)
+    testRuntimeOnly(libs.junit5.vintage.engine)
+    testImplementation(libs.room.testing)
+    testImplementation(libs.androidx.test.core)
 
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
