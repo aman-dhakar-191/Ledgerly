@@ -83,6 +83,7 @@ fun ReviewInboxScreen(onBack: () -> Unit, viewModel: ReviewInboxViewModel = hilt
     }
 }
 
+@Suppress("LongMethod") // one field per editable transaction attribute; splitting would scatter one cohesive form
 @Composable
 private fun ReviewItemCard(
     item: ReviewItem,

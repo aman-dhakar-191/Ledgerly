@@ -37,7 +37,13 @@ class ReviewConfirmationServiceTest {
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LedgerlyDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        service = ReviewConfirmationService(db.transactionDao(), db.rawSmsDao(), db.parserRuleDao(), db.goldenTestDao())
+        service = ReviewConfirmationService(
+            db.transactionDao(),
+            db.rawSmsDao(),
+            db.parserRuleDao(),
+            db.goldenTestDao(),
+            db.transactionAuditDao(),
+        )
     }
 
     @After
@@ -153,6 +159,42 @@ class ReviewConfirmationServiceTest {
         assertThat(db.parserRuleDao().observeAll().first()).isEmpty()
         val goldenTests = db.goldenTestDao().observeAll().first()
         assertThat(goldenTests.single().expectedJson).contains("\"amount\":60000")
+    }
+
+    @Test
+    fun `an edited field writes an audit row, per CONTEXT_md invariant 5`() = runTest {
+        val transaction = seedPendingTransaction()
+        val correction = ReviewCorrection(
+            amount = 60_000L,
+            direction = Direction.DEBIT,
+            merchant = null,
+            occurredAt = receivedAt,
+            balanceAfter = null,
+        )
+
+        service.confirm(transaction, correction)
+
+        val audits = db.transactionAuditDao().observeForTransaction("txn-1").first()
+        assertThat(audits).hasSize(1)
+        assertThat(audits.single().field).isEqualTo("amount")
+        assertThat(audits.single().oldValue).isEqualTo("50000")
+        assertThat(audits.single().newValue).isEqualTo("60000")
+    }
+
+    @Test
+    fun `confirming with no edits writes no audit rows`() = runTest {
+        val transaction = seedPendingTransaction()
+        val correction = ReviewCorrection(
+            amount = 50_000L,
+            direction = Direction.DEBIT,
+            merchant = null,
+            occurredAt = receivedAt,
+            balanceAfter = null,
+        )
+
+        service.confirm(transaction, correction)
+
+        assertThat(db.transactionAuditDao().observeForTransaction("txn-1").first()).isEmpty()
     }
 
     @Test
