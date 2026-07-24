@@ -35,6 +35,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.amandhakar.ledgerly.ingest.LastProcessedStore
+import com.amandhakar.ledgerly.ui.accounts.AccountsScreen
 import com.amandhakar.ledgerly.ui.sms.SmsPermissionScreen
 import com.amandhakar.ledgerly.ui.update.UpdateScreen
 import java.time.Instant
@@ -93,6 +94,7 @@ fun UnlockScreen(
 private fun HomeScreen(openUpdate: Boolean) {
     var showUpdateScreen by remember { mutableStateOf(openUpdate) }
     var showSmsPermissionScreen by remember { mutableStateOf(false) }
+    var showAccountsScreen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     var lastProcessedAt by remember { mutableStateOf<Long?>(null) }
 
@@ -108,6 +110,8 @@ private fun HomeScreen(openUpdate: Boolean) {
         UpdateScreen(onBack = { showUpdateScreen = false })
     } else if (showSmsPermissionScreen) {
         SmsPermissionScreen(onDone = { showSmsPermissionScreen = false })
+    } else if (showAccountsScreen) {
+        AccountsScreen(onBack = { showAccountsScreen = false })
     } else {
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -116,6 +120,7 @@ private fun HomeScreen(openUpdate: Boolean) {
             Text("Unlocked")
             Button(onClick = { showUpdateScreen = true }) { Text("Check for updates") }
             Button(onClick = { showSmsPermissionScreen = true }) { Text("Import transactions from SMS") }
+            Button(onClick = { showAccountsScreen = true }) { Text("Accounts") }
             Text(
                 "Last SMS processed: ${formatLastProcessed(lastProcessedAt)}",
                 style = MaterialTheme.typography.bodySmall,
