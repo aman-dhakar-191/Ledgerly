@@ -15,12 +15,13 @@ import org.robolectric.RobolectricTestRunner
  * expects, from the exported schema in core/database/schemas/), runs the migration, and checks
  * the pre-existing row survived untouched with the new column defaulting to NULL.
  *
- * `schemas/.../2.json` is the real KSP-exported schema for the current entities. `schemas/.../1.json`
- * is derived from it (schema_demo_note column removed, version set to 1) rather than independently
- * generated, since this project went straight from version 1 to version 2 in code without ever
- * building version 1 on its own — its `identityHash` is therefore a placeholder, not a real Room
- * hash. That's fine here: MigrationTestHelper.createDatabase() builds the historical database from
- * `createSql`, it doesn't validate identityHash against anything for this synthetic-migration flow.
+ * `schemas/.../2.json` and `.../3.json` are real KSP-exported schemas. `schemas/.../1.json` is
+ * derived from `2.json` by hand (schema_demo_note column removed, version set to 1) rather than
+ * independently generated, since this project went straight from version 1 to version 2 in code
+ * without ever building version 1 on its own — its `identityHash` is therefore a placeholder, not
+ * a real Room hash. That's fine here: MigrationTestHelper.createDatabase() builds the historical
+ * database from `createSql`, it doesn't validate identityHash against anything for this
+ * synthetic-migration flow.
  */
 @RunWith(RobolectricTestRunner::class)
 class MigrationTest {
@@ -72,6 +73,52 @@ class MigrationTest {
             assertThat(cursor.getString(cursor.getColumnIndexOrThrow("merchant_raw"))).isEqualTo("Swiggy")
             assertThat(cursor.getString(cursor.getColumnIndexOrThrow("notes"))).isEqualTo("lunch")
             assertThat(cursor.isNull(cursor.getColumnIndexOrThrow("schema_demo_note"))).isTrue()
+        }
+    }
+
+    /**
+     * Task 1.4: `sender_registry` gains `institution`, backfilled from `sender_id` on existing
+     * rows; `parser_rule.sender_id` is renamed to `institution` outright. Both migrations from
+     * one starting v2 database, since [MIGRATION_2_3] touches both tables in one step.
+     */
+    @Test
+    fun `migrate 2 to 3 adds institution to sender_registry and renames it on parser_rule`() {
+        helper.createDatabase(testDbName, 2).apply {
+            execSQL(
+                """
+                INSERT INTO sender_registry (
+                    sender_id, label, type, trusted, account_id, created_at, updated_at, deleted_at
+                ) VALUES (
+                    'AD-ICICIT-S', 'ICICI Bank', 'BANK', 1, NULL, 1700000000000, 1700000000000, NULL
+                )
+                """.trimIndent(),
+            )
+            execSQL(
+                """
+                INSERT INTO parser_rule (
+                    id, sender_id, pattern, field_map, txn_type, priority, confidence, active,
+                    created_from_sms_id, match_count, correction_count, version,
+                    created_at, updated_at, deleted_at
+                ) VALUES (
+                    'rule-1', 'AD-ICICIT-S', 'Rs\.(\d+) debited', '{"1":"amount"}', 'DEBIT', 10, 0.9, 1,
+                    'sms-1', 0, 0, 1, 1700000000000, 1700000000000, NULL
+                )
+                """.trimIndent(),
+            )
+            close()
+        }
+
+        val migrated = helper.runMigrationsAndValidate(testDbName, 3, true, MIGRATION_2_3)
+
+        migrated.query("SELECT * FROM sender_registry WHERE sender_id = 'AD-ICICIT-S'").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getString(cursor.getColumnIndexOrThrow("institution"))).isEqualTo("AD-ICICIT-S")
+            assertThat(cursor.getString(cursor.getColumnIndexOrThrow("label"))).isEqualTo("ICICI Bank")
+        }
+        migrated.query("SELECT * FROM parser_rule WHERE id = 'rule-1'").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getString(cursor.getColumnIndexOrThrow("institution"))).isEqualTo("AD-ICICIT-S")
+            assertThat(cursor.getString(cursor.getColumnIndexOrThrow("pattern"))).isEqualTo("Rs\\.(\\d+) debited")
         }
     }
 }
