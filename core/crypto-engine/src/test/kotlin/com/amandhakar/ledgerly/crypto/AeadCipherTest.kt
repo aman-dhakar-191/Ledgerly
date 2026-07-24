@@ -44,7 +44,8 @@ class AeadCipherTest {
     fun `tampered ciphertext fails GCM authentication`() {
         val dek = randomDek()
         val blob = AeadCipher.encrypt(dek, "txn-2026-07", 1, "sensitive data".toByteArray())
-        val tampered = blob.copy(ciphertext = blob.ciphertext.copyOf().also { it[0] = (it[0].toInt() xor 0x01).toByte() })
+        val flippedCiphertext = blob.ciphertext.copyOf().also { it[0] = (it[0].toInt() xor 0x01).toByte() }
+        val tampered = blob.copy(ciphertext = flippedCiphertext)
 
         assertThrows<GeneralSecurityException> {
             AeadCipher.decrypt(dek, "txn-2026-07", tampered)

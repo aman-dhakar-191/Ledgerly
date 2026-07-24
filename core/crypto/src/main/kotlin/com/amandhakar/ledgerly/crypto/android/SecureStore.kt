@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Base64
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -13,7 +14,7 @@ import javax.inject.Singleton
  * docs/crypto.md.
  */
 @Singleton
-class SecureStore @Inject constructor(context: Context) {
+class SecureStore @Inject constructor(@ApplicationContext context: Context) {
 
     private val masterKey = MasterKey.Builder(context)
         .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)

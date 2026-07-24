@@ -1,6 +1,14 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.detekt)
+}
+
+detekt {
+    config.setFrom(file("$rootDir/detekt.yml"))
+    buildUponDefaultConfig = true
 }
 
 android {
@@ -25,10 +33,13 @@ dependencies {
     implementation(project(":core:crypto-engine"))
 
     implementation(libs.core.ktx)
+    implementation(libs.fragment.ktx)
     implementation(libs.lifecycle.process)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.biometric)
     implementation(libs.security.crypto)
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
 
     testImplementation(libs.junit5.api)
     testRuntimeOnly(libs.junit5.engine)

@@ -4,6 +4,12 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.detekt)
+}
+
+detekt {
+    config.setFrom(file("$rootDir/detekt.yml"))
+    buildUponDefaultConfig = true
 }
 
 android {
@@ -44,6 +50,7 @@ dependencies {
     implementation(project(":core:crypto"))
 
     implementation(libs.core.ktx)
+    implementation(libs.fragment.ktx)
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.activity.compose)
 

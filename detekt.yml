@@ -1,0 +1,13 @@
+# Task 0.1: baseline detekt config, layered on detekt's own default ruleset
+# (buildUponDefaultConfig = true in each module's build.gradle.kts).
+
+style:
+  MagicNumber:
+    active: false # money/timestamp/crypto constants are pervasive and self-explanatory in context
+
+complexity:
+  TooManyFunctions:
+    active: true
+    thresholdInFiles: 20
+    thresholdInClasses: 20
+    thresholdInInterfaces: 15

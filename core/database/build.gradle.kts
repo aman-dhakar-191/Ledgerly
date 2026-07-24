@@ -3,6 +3,13 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.detekt)
+}
+
+detekt {
+    config.setFrom(file("$rootDir/detekt.yml"))
+    buildUponDefaultConfig = true
 }
 
 android {
@@ -47,6 +54,8 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
 
     // Every test in this module builds a Room database, which needs an Android Context even for
     // "unit" tests — that means Robolectric, which only drives a JUnit4 @RunWith runner. JUnit5's

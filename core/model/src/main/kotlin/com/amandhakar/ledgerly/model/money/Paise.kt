@@ -51,6 +51,7 @@ value class Paise(val value: Long) : Comparable<Paise> {
          * Returns null for malformed input rather than throwing — callers route
          * unparseable amounts to review, they never crash the parser.
          */
+        @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this parser
         fun fromRupeeString(s: String): Paise? {
             val match = AMOUNT_PATTERN.matchEntire(s.trim()) ?: return null
             val numeric = match.groupValues[1].replace(",", "")
@@ -65,6 +66,7 @@ value class Paise(val value: Long) : Comparable<Paise> {
             return Paise(paise)
         }
 
+        @Suppress("SwallowedException") // an unknown ISO code intentionally falls back to the raw code
         private fun currencySymbol(currency: String): String = when (currency) {
             "INR" -> "₹"
             else -> try {
