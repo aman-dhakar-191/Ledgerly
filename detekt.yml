@@ -1,0 +1,22 @@
+# Task 0.1: baseline detekt config, layered on detekt's own default ruleset
+# (buildUponDefaultConfig = true in each module's build.gradle.kts).
+
+style:
+  MagicNumber:
+    active: false # money/timestamp/crypto constants are pervasive and self-explanatory in context
+  MaxLineLength:
+    maxLineLength: 140
+    excludeCommentStatements: true
+
+naming:
+  FunctionNaming:
+    ignoreAnnotated: ['Composable'] # PascalCase is the Compose convention, not a naming violation
+
+complexity:
+  TooManyFunctions:
+    active: true
+    thresholdInFiles: 30
+    # Converters is exactly 2 functions (to/from) per enum type by design — one class, one
+    # TypeConverters registration, rather than scattering them across files.
+    thresholdInClasses: 25
+    thresholdInInterfaces: 15

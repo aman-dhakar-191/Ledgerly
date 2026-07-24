@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- allowBackup="false" already opts the whole app out; this file exists so a
+     future re-enable of platform backup doesn't accidentally include the
+     encrypted key material or database, since data is never meant to leave
+     the device except as the crypto.md blob sync (Phase 5), never via
+     Android's own backup transport. -->
+<data-extraction-rules>
+    <cloud-backup disableIfNoEncryptionCapability="false">
+        <exclude domain="root" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+    </device-transfer>
+</data-extraction-rules>
