@@ -20,4 +20,18 @@ class SenderTest {
     fun `sender IDs collapse to their institution`(raw: String, expected: String) {
         assertThat(normalizeSender(raw)).isEqualTo(expected)
     }
+
+    @ParameterizedTest
+    @CsvSource(
+        "9876543210, true",
+        "+919876543210, true",
+        "919876543210, true",
+        "AD-ICICIT-S, false",
+        "ICICIT, false",
+        "56070, false",
+        "VM-HDFCBK, false",
+    )
+    fun `only a bare digit string is a personal number`(sender: String, expected: Boolean) {
+        assertThat(isPersonalNumber(sender)).isEqualTo(expected)
+    }
 }
