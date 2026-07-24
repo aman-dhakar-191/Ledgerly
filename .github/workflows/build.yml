@@ -47,8 +47,13 @@ jobs:
       # TEMPORARY — extracting the real v3 schema export for Task 1.4's migration test, same
       # technique as v2's export (this sandbox has no path to download the artifact zip directly).
       # Will be removed once the schema is committed.
-      - name: Print v3 schema export
-        run: cat "core/database/schemas/com.amandhakar.ledgerly.database.LedgerlyDatabase/3.json"
+      - name: Print schema export directory contents
+        run: |
+          ls -la "core/database/schemas/com.amandhakar.ledgerly.database.LedgerlyDatabase/" || true
+          for f in "core/database/schemas/com.amandhakar.ledgerly.database.LedgerlyDatabase/"*.json; do
+            echo "=== $f ==="
+            cat "$f"
+          done
 
       - name: Upload test report on failure
         if: failure()
