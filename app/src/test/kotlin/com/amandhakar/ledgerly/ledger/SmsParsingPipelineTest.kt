@@ -55,6 +55,7 @@ class SmsParsingPipelineTest {
             db.transactionDao(),
             db.parserRuleDao(),
             db.balanceAnchorDao(),
+            db.payeeAllowlistDao(),
             reconciler,
             ledgerSettingsStore,
         )

@@ -44,6 +44,7 @@ class ReviewConfirmationServiceTest {
             db.transactionDao(),
             db.parserRuleDao(),
             db.balanceAnchorDao(),
+            db.payeeAllowlistDao(),
             TransactionReconciler(db.balanceAnchorDao(), db.transactionDao()),
             LedgerSettingsStore(ApplicationProvider.getApplicationContext()),
         )
