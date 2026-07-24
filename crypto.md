@@ -7,6 +7,24 @@ Not defended: malware on an unlocked device with the app open.
 
 ---
 
+## Module split
+
+Crypto lives in two modules, deliberately:
+
+| Module | Contents | Tests |
+|---|---|---|
+| `:core:crypto-engine` | Argon2id KDF, HKDF, AES-256-GCM AEAD. **Pure Kotlin, zero Android dependency.** | JVM unit tests, run in CI on every commit |
+| `:core:crypto` | `CryptoManagerImpl` — Keystore wrapping, `BiometricPrompt`, lifecycle locking | instrumented, device only |
+
+The split exists so the security-critical primitives are testable in CI. Anything
+touching Keystore forces instrumented tests, which GitHub runners cannot execute
+meaningfully; keeping the primitives Android-free means nonce uniqueness,
+tamper-detection, and KDF determinism are verified on every push.
+
+Do not merge these modules or move primitive logic into `:core:crypto`.
+
+---
+
 ## Key hierarchy
 
 ```
@@ -85,10 +103,10 @@ for the passphrase.
 - Never fall back to unencrypted access
 
 **Recovery warning text (must be shown verbatim at setup):**
-> Your passphrase is the only way to recover your data. Anthropic, Google, and
-> this app cannot reset it. If you lose both your passphrase and this device,
-> your backups are permanently unreadable. Write it down and store it somewhere
-> physical.
+> Your passphrase is the only way to recover your data. It cannot be reset — not
+> by Google, not by this app, not by anyone. If you lose both your passphrase and
+> this device, your backups are permanently unreadable. Write it down and store
+> it somewhere physical.
 
 ---
 
