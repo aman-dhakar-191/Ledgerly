@@ -1,5 +1,6 @@
 package com.amandhakar.ledgerly.ui.update
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,8 @@ import com.amandhakar.ledgerly.update.UpdateInfo
 @Composable
 fun UpdateScreen(onBack: () -> Unit, viewModel: UpdateViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
+
+    BackHandler(onBack = onBack)
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),

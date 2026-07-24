@@ -1,5 +1,6 @@
 package com.amandhakar.ledgerly.ui.export
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +47,8 @@ fun DataExportScreen(onBack: () -> Unit, viewModel: DataExportViewModel = hiltVi
     val scope = rememberCoroutineScope()
     var statusText by remember { mutableStateOf<String?>(null) }
     val today = Instant.now().atZone(ZoneId.systemDefault()).format(FILENAME_FORMATTER)
+
+    BackHandler(onBack = onBack)
 
     val csvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult

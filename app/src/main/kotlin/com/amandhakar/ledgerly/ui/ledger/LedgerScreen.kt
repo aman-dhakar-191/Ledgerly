@@ -1,5 +1,6 @@
 package com.amandhakar.ledgerly.ui.ledger
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,21 +47,24 @@ fun LedgerScreen(onBack: () -> Unit, viewModel: LedgerViewModel = hiltViewModel(
 
     val selectedAccount = state.accounts.find { it.id == state.selectedAccountId }
 
+    // One level at a time, matching what's actually on screen - the system back button must do
+    // exactly what the in-app "Back" button does, never fall through and close the app.
+    val handleBack: () -> Unit = {
+        when {
+            selectedTransaction != null -> selectedTransaction = null
+            showAddForm -> showAddForm = false
+            selectedAccount != null -> viewModel.selectAccount(null)
+            else -> onBack()
+        }
+    }
+    BackHandler(onBack = handleBack)
+
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
-            TextButton(
-                onClick = {
-                    when {
-                        selectedTransaction != null -> selectedTransaction = null
-                        showAddForm -> showAddForm = false
-                        selectedAccount != null -> viewModel.selectAccount(null)
-                        else -> onBack()
-                    }
-                },
-            ) { Text("Back") }
+            TextButton(onClick = handleBack) { Text("Back") }
         }
 
         when {

@@ -1,5 +1,6 @@
 package com.amandhakar.ledgerly.ui.initialization
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,6 +44,8 @@ fun InitializationScreen(onBack: () -> Unit, viewModel: InitializationViewModel 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd") }
     var dateText by remember(state.ledgerStartDate) { mutableStateOf(toLocalDate(state.ledgerStartDate).format(dateFormatter)) }
     var dateError by remember { mutableStateOf(false) }
+
+    BackHandler(onBack = onBack)
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
