@@ -15,10 +15,12 @@ import org.robolectric.RobolectricTestRunner
  * expects, from the exported schema in core/database/schemas/), runs the migration, and checks
  * the pre-existing row survived untouched with the new column defaulting to NULL.
  *
- * NOTE: this test needs `core/database/schemas/<...>.LedgerlyDatabase/1.json`, which Room/KSP
- * generates on the first real build (see the `ksp { arg("room.schemaLocation", ...) }` block in
- * build.gradle.kts). This sandbox has no Android SDK to run KSP, so that file doesn't exist yet
- * here and this test cannot execute until it's built once in a real Android environment.
+ * `schemas/.../2.json` is the real KSP-exported schema for the current entities. `schemas/.../1.json`
+ * is derived from it (schema_demo_note column removed, version set to 1) rather than independently
+ * generated, since this project went straight from version 1 to version 2 in code without ever
+ * building version 1 on its own — its `identityHash` is therefore a placeholder, not a real Room
+ * hash. That's fine here: MigrationTestHelper.createDatabase() builds the historical database from
+ * `createSql`, it doesn't validate identityHash against anything for this synthetic-migration flow.
  */
 @RunWith(RobolectricTestRunner::class)
 class MigrationTest {

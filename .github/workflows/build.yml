@@ -33,17 +33,6 @@ jobs:
       - name: Run detekt
         run: ./gradlew detekt --stacktrace
 
-      # MigrationTestHelper reads the exported schema (core/database/schemas/) as a test asset.
-      # Generating it as its own prior Gradle invocation guarantees the file exists on disk before
-      # the test task's asset bundling runs, sidestepping any KSP-vs-asset-merge task ordering.
-      - name: Generate Room schema export
-        run: ./gradlew :core:database:kspDebugKotlin --stacktrace
-
-      # Diagnostic: confirm exactly where (and whether) the schema landed, since
-      # MigrationTest has failed with FileNotFoundException despite the generate step above.
-      - name: List Room schema export
-        run: find core/database/schemas -type f -print -exec cat {} \; || echo "schemas dir not found"
-
       # Gates everything below. Crypto, money-type, reconciliation and
       # golden-test failures must never produce an installable APK.
       - name: Run unit tests
