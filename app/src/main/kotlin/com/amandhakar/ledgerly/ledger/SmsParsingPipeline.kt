@@ -3,6 +3,7 @@ package com.amandhakar.ledgerly.ledger
 import com.amandhakar.ledgerly.database.dao.AccountDao
 import com.amandhakar.ledgerly.database.dao.BalanceAnchorDao
 import com.amandhakar.ledgerly.database.dao.ParserRuleDao
+import com.amandhakar.ledgerly.database.dao.PayeeAllowlistDao
 import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.SenderRegistryDao
 import com.amandhakar.ledgerly.database.dao.TransactionDao
@@ -44,8 +45,9 @@ import com.amandhakar.ledgerly.parser.Direction as ParserDirection
  *        yes -> match by priority desc; match -> reconcile -> CONFIRMED/flagged; no match -> REVIEW
  *        no  -> Tier 2 (generic extractor) -> PENDING_REVIEW
  * ```
- * `is_internal` (Task 1.12) is never set here: the allowlist is only ever populated by explicit
- * user confirmation from the review inbox, never inferred at ingestion.
+ * `is_internal` (Task 1.12) is only ever set here from an *already-confirmed*
+ * [com.amandhakar.ledgerly.database.entity.PayeeAllowlist] match — a new allowlist entry is still
+ * only ever added by explicit user confirmation from the review inbox, never inferred here.
  */
 @Suppress("LongParameterList") // one dependency per DAO/collaborator this pipeline actually needs
 class SmsParsingPipeline @Inject constructor(
@@ -55,6 +57,7 @@ class SmsParsingPipeline @Inject constructor(
     private val transactionDao: TransactionDao,
     private val parserRuleDao: ParserRuleDao,
     private val balanceAnchorDao: BalanceAnchorDao,
+    private val payeeAllowlistDao: PayeeAllowlistDao,
     private val transactionReconciler: TransactionReconciler,
     private val ledgerSettingsStore: LedgerSettingsStore,
 ) {
@@ -235,7 +238,7 @@ class SmsParsingPipeline @Inject constructor(
                 source = TransactionSource.SMS_GENERIC,
                 status = TransactionStatus.PENDING_REVIEW,
                 transferId = null,
-                isInternal = false,
+                isInternal = isAllowlistedPayee(payeeAllowlistDao, extraction.merchant.value),
                 notes = null,
                 createdAt = now,
                 updatedAt = now,
@@ -258,6 +261,7 @@ class SmsParsingPipeline @Inject constructor(
         status: TransactionStatus,
     ) {
         val now = System.currentTimeMillis()
+        val isInternal = isAllowlistedPayee(payeeAllowlistDao, merchant)
         if (existing != null) {
             transactionDao.update(
                 existing.copy(
@@ -269,6 +273,7 @@ class SmsParsingPipeline @Inject constructor(
                     balanceAfter = balanceAfter,
                     source = TransactionSource.SMS_RULE,
                     status = status,
+                    isInternal = isInternal,
                     updatedAt = now,
                 ),
             )
@@ -287,7 +292,7 @@ class SmsParsingPipeline @Inject constructor(
                 source = TransactionSource.SMS_RULE,
                 status = status,
                 transferId = null,
-                isInternal = false,
+                isInternal = isInternal,
                 notes = null,
                 createdAt = now,
                 updatedAt = now,

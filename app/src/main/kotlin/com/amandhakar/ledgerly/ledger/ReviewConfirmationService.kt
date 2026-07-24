@@ -2,6 +2,7 @@ package com.amandhakar.ledgerly.ledger
 
 import com.amandhakar.ledgerly.database.dao.GoldenTestDao
 import com.amandhakar.ledgerly.database.dao.ParserRuleDao
+import com.amandhakar.ledgerly.database.dao.PayeeAllowlistDao
 import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.TransactionAuditDao
 import com.amandhakar.ledgerly.database.dao.TransactionDao
@@ -39,12 +40,21 @@ class ReviewConfirmationService @Inject constructor(
     private val parserRuleDao: ParserRuleDao,
     private val goldenTestDao: GoldenTestDao,
     private val transactionAuditDao: TransactionAuditDao,
+    private val payeeAllowlistDao: PayeeAllowlistDao,
     private val smsParsingPipeline: SmsParsingPipeline,
 ) {
     suspend fun confirm(transaction: Transaction, correction: ReviewCorrection) {
         val now = System.currentTimeMillis()
         val changed = writeTransactionEditAudit(transactionAuditDao, transaction, correction, now)
         if (changed) maybeIncrementRuleCorrection(rawSmsDao, parserRuleDao, transaction, now)
+
+        // Task 1.12: the only place a new PayeeAllowlist entry is ever created - explicit user
+        // confirmation from the review inbox, never inferred from a resembling name.
+        if (correction.markInternalTransfer && correction.merchant != null) {
+            confirmAllowlistedPayee(payeeAllowlistDao, correction.merchant, now)
+        }
+        val isInternal = correction.markInternalTransfer || isAllowlistedPayee(payeeAllowlistDao, correction.merchant)
+
         transactionDao.update(
             transaction.copy(
                 amount = correction.amount,
@@ -52,6 +62,7 @@ class ReviewConfirmationService @Inject constructor(
                 merchantRaw = correction.merchant,
                 occurredAt = correction.occurredAt,
                 balanceAfter = correction.balanceAfter,
+                isInternal = isInternal,
                 status = TransactionStatus.CONFIRMED,
                 updatedAt = now,
             ),
