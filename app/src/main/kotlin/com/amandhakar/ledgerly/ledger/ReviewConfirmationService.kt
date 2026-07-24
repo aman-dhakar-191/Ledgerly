@@ -2,11 +2,13 @@ package com.amandhakar.ledgerly.ledger
 
 import com.amandhakar.ledgerly.database.dao.GoldenTestDao
 import com.amandhakar.ledgerly.database.dao.ParserRuleDao
+import com.amandhakar.ledgerly.database.dao.PayeeAllowlistDao
 import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.TransactionAuditDao
 import com.amandhakar.ledgerly.database.dao.TransactionDao
 import com.amandhakar.ledgerly.database.entity.Direction
 import com.amandhakar.ledgerly.database.entity.GoldenTest
+import com.amandhakar.ledgerly.database.entity.ParseStatus
 import com.amandhakar.ledgerly.database.entity.ParserRule
 import com.amandhakar.ledgerly.database.entity.ParserTxnType
 import com.amandhakar.ledgerly.database.entity.RawSms
@@ -32,16 +34,28 @@ import kotlinx.coroutines.flow.first
  * either just means no rule this round, not a blocked confirmation — the transaction and golden
  * test are written regardless.
  */
+@Suppress("LongParameterList") // one DAO per entity this service touches, matching codebase precedent
 class ReviewConfirmationService @Inject constructor(
     private val transactionDao: TransactionDao,
     private val rawSmsDao: RawSmsDao,
     private val parserRuleDao: ParserRuleDao,
     private val goldenTestDao: GoldenTestDao,
     private val transactionAuditDao: TransactionAuditDao,
+    private val payeeAllowlistDao: PayeeAllowlistDao,
+    private val smsParsingPipeline: SmsParsingPipeline,
 ) {
     suspend fun confirm(transaction: Transaction, correction: ReviewCorrection) {
         val now = System.currentTimeMillis()
-        writeTransactionEditAudit(transactionAuditDao, transaction, correction, now)
+        val changed = writeTransactionEditAudit(transactionAuditDao, transaction, correction, now)
+        if (changed) maybeIncrementRuleCorrection(rawSmsDao, parserRuleDao, transaction, now)
+
+        // Task 1.12: the only place a new PayeeAllowlist entry is ever created - explicit user
+        // confirmation from the review inbox, never inferred from a resembling name.
+        if (correction.markInternalTransfer && correction.merchant != null) {
+            confirmAllowlistedPayee(payeeAllowlistDao, correction.merchant, now)
+        }
+        val isInternal = correction.markInternalTransfer || isAllowlistedPayee(payeeAllowlistDao, correction.merchant)
+
         transactionDao.update(
             transaction.copy(
                 amount = correction.amount,
@@ -49,6 +63,7 @@ class ReviewConfirmationService @Inject constructor(
                 merchantRaw = correction.merchant,
                 occurredAt = correction.occurredAt,
                 balanceAfter = correction.balanceAfter,
+                isInternal = isInternal,
                 status = TransactionStatus.CONFIRMED,
                 updatedAt = now,
             ),
@@ -56,19 +71,30 @@ class ReviewConfirmationService @Inject constructor(
 
         val rawSms = transaction.rawSmsId?.let { rawSmsDao.getById(it) } ?: return
         val extraction = GenericExtractor.extract(rawSms.body, rawSms.receivedAt)
-        val ruleId = generateAndActivateRule(rawSms, extraction, correction)
+        val rule = generateAndActivateRule(rawSms, extraction, correction)
+
+        // A confirmed message is resolved for good — PARSED keeps it out of Task 1.7's backfill
+        // scan (REVIEW/FAILED only), which must never touch an already-user-confirmed transaction.
+        rawSmsDao.update(
+            rawSms.copy(parseStatus = ParseStatus.PARSED, matchedRuleId = rule?.id ?: rawSms.matchedRuleId, updatedAt = now),
+        )
 
         goldenTestDao.insert(
             GoldenTest(
                 id = UUID.randomUUID().toString(),
                 rawBody = anonymize(rawSms.body, extraction.accountLast4.span),
                 expectedJson = encodeExpectation(correction),
-                ruleId = ruleId,
+                ruleId = rule?.id,
                 createdAt = now,
                 updatedAt = now,
                 deletedAt = null,
             ),
         )
+
+        // docs/parser.md's backfill: "when a rule is added ... re-run over RawSms where
+        // parse_status IN (REVIEW, FAILED) for that sender" - other pending messages this exact
+        // shape already covers shouldn't wait for their own individual confirmation.
+        if (rule != null) smsParsingPipeline.backfillRule(rule)
     }
 
     @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this validation gate
@@ -76,7 +102,7 @@ class ReviewConfirmationService @Inject constructor(
         rawSms: RawSms,
         extraction: GenericExtraction,
         correction: ReviewCorrection,
-    ): String? {
+    ): ParserRule? {
         val confirmedFields = confirmedSpans(extraction, correction)
         if (confirmedFields.isEmpty()) return null
 
@@ -90,29 +116,26 @@ class ReviewConfirmationService @Inject constructor(
         }
         if (conflict) return null
 
-        val ruleId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
-        parserRuleDao.insert(
-            ParserRule(
-                id = ruleId,
-                institution = rawSms.institution,
-                pattern = candidate.pattern,
-                fieldMap = encodeFieldMap(candidate.fieldMap),
-                txnType = if (correction.direction == Direction.DEBIT) ParserTxnType.DEBIT else ParserTxnType.CREDIT,
-                priority = 0,
-                confidence = 1f,
-                active = true,
-                createdFromSmsId = rawSms.id,
-                matchCount = 1,
-                correctionCount = 0,
-                version = 1,
-                createdAt = now,
-                updatedAt = now,
-                deletedAt = null,
-            ),
+        val rule = ParserRule(
+            id = UUID.randomUUID().toString(),
+            institution = rawSms.institution,
+            pattern = candidate.pattern,
+            fieldMap = encodeFieldMap(candidate.fieldMap),
+            txnType = if (correction.direction == Direction.DEBIT) ParserTxnType.DEBIT else ParserTxnType.CREDIT,
+            priority = 0,
+            confidence = 1f,
+            active = true,
+            createdFromSmsId = rawSms.id,
+            matchCount = 1,
+            correctionCount = 0,
+            version = 1,
+            createdAt = now,
+            updatedAt = now,
+            deletedAt = null,
         )
-        rawSmsDao.update(rawSms.copy(matchedRuleId = ruleId, updatedAt = now))
-        return ruleId
+        parserRuleDao.insert(rule)
+        return rule
     }
 
     /** Only fields the user left as-extracted are trustworthy enough to anchor a rule on. */
@@ -127,9 +150,6 @@ class ReviewConfirmationService @Inject constructor(
         return fields
     }
 }
-
-private fun encodeFieldMap(fieldMap: Map<String, Int>): String =
-    fieldMap.entries.joinToString(prefix = "{", postfix = "}") { (name, group) -> "\"$name\":$group" }
 
 private fun encodeExpectation(correction: ReviewCorrection): String {
     val merchantJson = correction.merchant?.let { "\"${it.replace("\"", "\\\"")}\"" } ?: "null"

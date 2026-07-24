@@ -37,12 +37,25 @@ class ReviewConfirmationServiceTest {
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LedgerlyDatabase::class.java)
             .allowMainThreadQueries()
             .build()
+        val pipeline = SmsParsingPipeline(
+            db.rawSmsDao(),
+            db.senderRegistryDao(),
+            db.accountDao(),
+            db.transactionDao(),
+            db.parserRuleDao(),
+            db.balanceAnchorDao(),
+            db.payeeAllowlistDao(),
+            TransactionReconciler(db.balanceAnchorDao(), db.transactionDao()),
+            LedgerSettingsStore(ApplicationProvider.getApplicationContext()),
+        )
         service = ReviewConfirmationService(
             db.transactionDao(),
             db.rawSmsDao(),
             db.parserRuleDao(),
             db.goldenTestDao(),
             db.transactionAuditDao(),
+            db.payeeAllowlistDao(),
+            pipeline,
         )
     }
 

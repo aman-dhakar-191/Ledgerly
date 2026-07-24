@@ -16,7 +16,9 @@ class UnlockActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
+        // TODO(re-enable before next release): FLAG_SECURE temporarily disabled so screenshots
+        // can be taken to report bugs during this testing round.
+        // window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
 
         val openUpdate = intent.getBooleanExtra(EXTRA_OPEN_UPDATE, false)
         setContent {

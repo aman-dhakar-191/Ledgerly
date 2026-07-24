@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -98,6 +99,7 @@ private fun ReviewItemCard(
     var balanceText by remember(transaction.id) {
         mutableStateOf(transaction.balanceAfter?.let { Paise(it).format("").trim() }.orEmpty())
     }
+    var markInternalTransfer by remember(transaction.id) { mutableStateOf(false) }
 
     val amount = Paise.fromRupeeString(amountText)
     val balance = if (balanceText.isBlank()) null else Paise.fromRupeeString(balanceText)
@@ -141,6 +143,19 @@ private fun ReviewItemCard(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        Row {
+            Checkbox(
+                checked = markInternalTransfer,
+                onCheckedChange = { markInternalTransfer = it },
+                enabled = merchantText.isNotBlank(),
+            )
+            Text(
+                "This is a transfer to my own account",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 enabled = canConfirm,
@@ -152,6 +167,7 @@ private fun ReviewItemCard(
                             merchant = merchantText.ifBlank { null },
                             occurredAt = transaction.occurredAt,
                             balanceAfter = balance?.value,
+                            markInternalTransfer = markInternalTransfer,
                         ),
                     )
                 },

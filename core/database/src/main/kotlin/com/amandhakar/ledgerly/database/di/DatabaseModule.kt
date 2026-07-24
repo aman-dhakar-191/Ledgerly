@@ -7,6 +7,7 @@ import com.amandhakar.ledgerly.database.dao.AccountDao
 import com.amandhakar.ledgerly.database.dao.BalanceAnchorDao
 import com.amandhakar.ledgerly.database.dao.GoldenTestDao
 import com.amandhakar.ledgerly.database.dao.ParserRuleDao
+import com.amandhakar.ledgerly.database.dao.PayeeAllowlistDao
 import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.SenderRegistryDao
 import com.amandhakar.ledgerly.database.dao.TransactionAuditDao
@@ -39,4 +40,5 @@ object DatabaseModule {
     @Provides fun provideTransactionDao(db: LedgerlyDatabase): TransactionDao = db.transactionDao()
     @Provides fun provideTransactionAuditDao(db: LedgerlyDatabase): TransactionAuditDao = db.transactionAuditDao()
     @Provides fun provideBalanceAnchorDao(db: LedgerlyDatabase): BalanceAnchorDao = db.balanceAnchorDao()
+    @Provides fun providePayeeAllowlistDao(db: LedgerlyDatabase): PayeeAllowlistDao = db.payeeAllowlistDao()
 }

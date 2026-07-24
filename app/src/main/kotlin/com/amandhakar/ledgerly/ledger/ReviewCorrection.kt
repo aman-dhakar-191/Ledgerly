@@ -15,4 +15,10 @@ data class ReviewCorrection(
     val merchant: String?,
     val occurredAt: Long,
     val balanceAfter: Long?,
+    /**
+     * Task 1.12: explicit user confirmation that [merchant] is one of the user's own accounts —
+     * the only way a [com.amandhakar.ledgerly.database.entity.PayeeAllowlist] entry is ever
+     * created. Never inferred from a resembling name.
+     */
+    val markInternalTransfer: Boolean = false,
 )
