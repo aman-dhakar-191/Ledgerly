@@ -54,9 +54,9 @@ class PaiseTest {
     @Test
     fun `comparison and sign helpers`() {
         assertThat(Paise(100) > Paise(50)).isTrue()
-        assertThat(Paise(-1).isNegative).isTrue()
-        assertThat(Paise(0).isZero).isTrue()
-        assertThat(Paise(1).isZero).isFalse()
+        assertThat(Paise(-1).isNegative()).isTrue()
+        assertThat(Paise(0).isZero()).isTrue()
+        assertThat(Paise(1).isZero()).isFalse()
     }
 
     @ParameterizedTest

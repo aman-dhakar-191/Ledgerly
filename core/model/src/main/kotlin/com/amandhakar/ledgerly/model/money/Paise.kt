@@ -12,11 +12,11 @@ import kotlinx.serialization.Serializable
  * representation of money allowed in the ledger. Convert to a display string
  * only at the UI edge via [format].
  */
-// Deliberately not `: Comparable<Paise>` — a value class implementing any interface forces
-// Kotlin to generate a boxed representation with an extra constructor, which crashes Room's KSP
-// processor (`getValueClassUnderlyingProperty: List has more than one element`) the moment this
-// type is used as a column via TypeConverter. Defining `operator fun compareTo` directly (Kotlin's
-// operator convention, not the Comparable interface) gives </>/<=/>= identically without it.
+// Not `: Comparable<Paise>` (a value class implementing an interface forces a boxed
+// representation), and isNegative/isZero are functions, not properties — Room's KSP processor
+// inspects a value class used as a column (via the TypeConverter below) to find its single
+// underlying property, and anything beyond the one constructor property made it see more than
+// one candidate and crash with `getValueClassUnderlyingProperty: List has more than one element`.
 @JvmInline
 @Serializable
 value class Paise(val value: Long) {
@@ -29,8 +29,8 @@ value class Paise(val value: Long) {
 
     operator fun compareTo(other: Paise): Int = value.compareTo(other.value)
 
-    val isNegative: Boolean get() = value < 0
-    val isZero: Boolean get() = value == 0L
+    fun isNegative(): Boolean = value < 0
+    fun isZero(): Boolean = value == 0L
 
     /** Formats as a display string, e.g. `Paise(123456).format() == "1,234.56"`. */
     fun format(currency: String = "INR"): String {
