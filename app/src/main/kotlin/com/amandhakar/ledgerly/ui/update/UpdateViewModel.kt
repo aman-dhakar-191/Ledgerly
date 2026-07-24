@@ -42,7 +42,10 @@ class UpdateViewModel @Inject constructor(
             _uiState.value = try {
                 val info = updateChecker.checkForUpdate()
                 if (info == null) UpdateUiState.UpToDate else UpdateUiState.Available(info)
-            } catch (e: IOException) {
+            } catch (
+                @Suppress("SwallowedException") // shown to the user as a plain failure state, not logged
+                e: IOException,
+            ) {
                 UpdateUiState.Failed("Couldn't check for updates. Check your connection and try again.")
             }
         }

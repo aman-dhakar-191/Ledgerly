@@ -44,7 +44,10 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
     override suspend fun doWork(): Result {
         val info = try {
             updateChecker.checkForUpdate()
-        } catch (e: IOException) {
+        } catch (
+            @Suppress("SwallowedException") // a network failure means retry, not a logged cause
+            e: IOException,
+        ) {
             return Result.retry()
         }
         if (info == null) return Result.success()
