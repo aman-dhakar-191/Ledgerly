@@ -41,15 +41,37 @@ value class Paise(val value: Long) {
     operator fun minus(other: Paise): Paise
     fun format(currency: String = "INR"): String
     companion object {
-        fun fromRupeeString(s: String): Paise?  // handles "1,234.56", "Rs.500"
+        fun fromRupeeString(s: String): Paise?
     }
 }
 ```
 
-No `Double` anywhere in the money path. Room `TypeConverter` to `Long`.
+`fromRupeeString` must handle every form observed in the real corpus
+(`docs/corpus-findings.md`):
 
-**Tests:** parsing with commas, decimals, currency prefixes, missing decimals,
-malformed input returns null; arithmetic; formatting.
+| Input | Note |
+|---|---|
+| `1,234.56` | commas |
+| `Rs.500` | prefix, no space |
+| `Rs 1698` | prefix with space, no decimals |
+| `Rs656.7` | **no space, one decimal** (axio) |
+| `INR 2,170.00` | |
+| `50.0` / `2` / `210.25` | 0, 1 or 2 decimals (SBI UPI) |
+| `.00` / `.30` | bare leading decimal (ICICI statement) |
+| `7,050/-` | trailing `/-` (EPFO) |
+| `USD 23.60` | non-INR — caller handles currency |
+
+Malformed input returns null. No `Double` anywhere in the money path. Room
+`TypeConverter` to `Long`.
+
+**Tests:** every row in the table above; malformed input returns null;
+arithmetic; formatting.
+
+> **Added after Phase 0 completed.** The original spec predated the corpus
+> analysis and listed only two formats. If `Paise` is already implemented,
+> extend `fromRupeeString` and its tests to cover the full table — several of
+> these (no-space prefix, bare leading decimal, trailing `/-`) will not parse
+> under a naive implementation.
 
 ---
 
