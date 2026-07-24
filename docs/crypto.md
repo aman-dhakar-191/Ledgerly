@@ -189,7 +189,10 @@ local use. Surface a "last synced" timestamp in settings.
 ## Additional hardening
 
 - `FLAG_SECURE` on all windows containing financial data — blocks screenshots
-  and the app-switcher thumbnail
+  and the app-switcher thumbnail.
+  **Currently disabled for development** (see `CONTEXT.md`). This is temporary
+  and must be re-enabled before the app holds real data long-term; without it,
+  the app-switcher preview and any screenshot expose balances and transactions.
 - Disable Android auto-backup: `android:allowBackup="false"`,
   `android:fullBackupContent="false"`
 - No financial values in logs, ever. Lint rule if practical.
