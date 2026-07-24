@@ -33,6 +33,15 @@ jobs:
       - name: Run detekt
         run: ./gradlew detekt --stacktrace
 
+      # TEMPORARY — force a fresh Room schema export. Room's KSP processor writes
+      # room.schemaLocation files as an untracked side effect, not a declared Gradle task output,
+      # so kspDebugKotlin being considered up-to-date/from-cache silently skips writing them —
+      # confirmed by a prior run in this same PR uploading only the two schema files already
+      # committed to the repo, both with checkout timestamps. --rerun-tasks forces real execution
+      # regardless of any cache/up-to-date state. Will be removed once the schema is committed.
+      - name: Force-regenerate Room schema export
+        run: ./gradlew :core:database:kspDebugKotlin --rerun-tasks --stacktrace
+
       # Gates everything below. Crypto, money-type, reconciliation and
       # golden-test failures must never produce an installable APK.
       - name: Run unit tests
