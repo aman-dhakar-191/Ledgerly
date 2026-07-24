@@ -114,6 +114,35 @@ Indexes: `(account_id, occurred_at)`, `(status)`, `(transfer_id)`.
 | changed_at | Long | |
 | reason | Enum | USER_EDIT, RULE_BACKFILL, RECONCILE_FIX |
 
+### BalanceAnchor — Phase 1
+
+A user-asserted true balance for an account at a point in time. Opening balances
+and later drift corrections are the same operation and use the same entity.
+
+| Field | Type | Notes |
+|---|---|---|
+| id | String | |
+| account_id | String | FK |
+| balance | Long | paise, asserted truth |
+| as_of | Long | |
+| source | Enum | OPENING, USER_CORRECTION, SMS_DERIVED |
+| note | String? | why the correction was made |
+
+Index: `(account_id, as_of)`.
+
+Reconciliation runs from **the most recent anchor at or before the
+transaction**, not from account creation. A new anchor resets accumulated drift
+to zero and prevents errors compounding forward.
+
+An anchor does **not** repair transactions before it. If drift arose from three
+missed messages in May, a June anchor makes future balances correct but May's
+totals stay understated. Therefore:
+
+- every anchor writes a `TransactionAudit` row
+- the UI must mark the window between the previous anchor and this one as
+  "reconciled from anchor", so aggregate totals in that window are visibly
+  lower-confidence
+
 ### Transfer — Phase 2
 
 | Field | Type | Notes |
@@ -277,15 +306,26 @@ Derived, not stored. Computed views over the above.
 
 Runs on every SMS-derived transaction carrying `balance_after`.
 
+The baseline is the most recent `BalanceAnchor` at or before the transaction,
+plus every confirmed transaction since that anchor. Not `account.current_balance`
+from creation — anchors are what stop drift compounding.
+
 ```
-expected = account.current_balance ± txn.amount
-if abs(expected - txn.balance_after) > 0:
+anchor   = latest BalanceAnchor where as_of <= txn.occurred_at
+baseline = anchor.balance + sum(confirmed txns between anchor.as_of and txn)
+expected = baseline ± txn.amount
+
+if expected != txn.balance_after:
     reject parse -> PENDING_REVIEW
-    flag possible missed SMS between balance_as_of and txn.occurred_at
+    flag probable missed SMS between the last reconciled point and this txn
+    offer the user: create a BalanceAnchor here to reset drift
 else:
     account.current_balance = txn.balance_after
-    account.balance_as_of  = txn.occurred_at
+    account.balance_as_of   = txn.occurred_at
 ```
+
+Transactions with no `balance_after` cannot be reconciled; they update the
+running balance but do not confirm it.
 
 This is the primary automated correctness check in the system. It catches
 misparsed amounts, missed messages, and bad learned rules without user attention.
