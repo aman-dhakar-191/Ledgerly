@@ -37,6 +37,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.amandhakar.ledgerly.ingest.LastProcessedStore
 import com.amandhakar.ledgerly.ui.accounts.AccountsScreen
 import com.amandhakar.ledgerly.ui.initialization.InitializationScreen
+import com.amandhakar.ledgerly.ui.ledger.LedgerScreen
 import com.amandhakar.ledgerly.ui.review.ReviewInboxScreen
 import com.amandhakar.ledgerly.ui.senders.SenderClassificationScreen
 import com.amandhakar.ledgerly.ui.sms.SmsPermissionScreen
@@ -101,6 +102,7 @@ private fun HomeScreen(openUpdate: Boolean) {
     var showInitializationScreen by remember { mutableStateOf(false) }
     var showSenderClassificationScreen by remember { mutableStateOf(false) }
     var showReviewInboxScreen by remember { mutableStateOf(false) }
+    var showLedgerScreen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     var lastProcessedAt by remember { mutableStateOf<Long?>(null) }
 
@@ -124,12 +126,15 @@ private fun HomeScreen(openUpdate: Boolean) {
         SenderClassificationScreen(onBack = { showSenderClassificationScreen = false })
     } else if (showReviewInboxScreen) {
         ReviewInboxScreen(onBack = { showReviewInboxScreen = false })
+    } else if (showLedgerScreen) {
+        LedgerScreen(onBack = { showLedgerScreen = false })
     } else {
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Unlocked")
+            Button(onClick = { showLedgerScreen = true }) { Text("Ledger") }
             Button(onClick = { showUpdateScreen = true }) { Text("Check for updates") }
             Button(onClick = { showSmsPermissionScreen = true }) { Text("Import transactions from SMS") }
             Button(onClick = { showAccountsScreen = true }) { Text("Accounts") }
