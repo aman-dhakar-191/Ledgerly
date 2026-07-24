@@ -33,10 +33,22 @@ jobs:
       - name: Run detekt
         run: ./gradlew detekt --stacktrace
 
+      # MigrationTestHelper reads the exported schema (core/database/schemas/) as a test asset.
+      # Generating it as its own prior Gradle invocation guarantees the file exists on disk before
+      # the test task's asset bundling runs, sidestepping any KSP-vs-asset-merge task ordering.
+      - name: Generate Room schema export
+        run: ./gradlew :core:database:kspDebugKotlin --stacktrace
+
       # Gates everything below. Crypto, money-type, reconciliation and
       # golden-test failures must never produce an installable APK.
       - name: Run unit tests
         run: ./gradlew test --stacktrace
+
+      - name: Upload Room schema export
+        uses: actions/upload-artifact@v4
+        with:
+          name: room-schemas
+          path: core/database/schemas/
 
       - name: Upload test report on failure
         if: failure()
