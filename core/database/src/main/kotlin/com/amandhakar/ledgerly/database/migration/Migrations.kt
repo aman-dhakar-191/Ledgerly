@@ -75,4 +75,17 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
-val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+/**
+ * Task 1.13/docs/schema.md: `raw_sms` gains `institution` and `parse_class`, both computed and
+ * written by the parsing pipeline (not at archive time — [com.amandhakar.ledgerly.ingest.RawSmsArchiver]
+ * still archives verbatim with no parsing). Pre-existing rows backfill to the column defaults
+ * (`''` / `UNKNOWN`) pending their next pipeline run, which sets them for real.
+ */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE raw_sms ADD COLUMN institution TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE raw_sms ADD COLUMN parse_class TEXT NOT NULL DEFAULT 'UNKNOWN'")
+    }
+}
+
+val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)

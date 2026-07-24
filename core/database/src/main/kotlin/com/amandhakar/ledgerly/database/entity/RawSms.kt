@@ -19,7 +19,11 @@ data class RawSms(
     @ColumnInfo(name = "received_at") val receivedAt: Long,
     @ColumnInfo(name = "subscription_id") val subscriptionId: Int?,
     @ColumnInfo(name = "dedupe_hash") val dedupeHash: String,
+    /** [com.amandhakar.ledgerly.parser.normalizeSender] applied to [sender] — added in Migration(3,4). */
+    @ColumnInfo(name = "institution", defaultValue = "''") val institution: String = "",
     @ColumnInfo(name = "parse_status") val parseStatus: ParseStatus,
+    /** Set by the hardcoded pre-filter (docs/parser.md) — added in Migration(3,4). */
+    @ColumnInfo(name = "parse_class", defaultValue = "'UNKNOWN'") val parseClass: ParseClass = ParseClass.UNKNOWN,
     @ColumnInfo(name = "matched_rule_id") val matchedRuleId: String?,
     @ColumnInfo(name = "created_at") val createdAt: Long,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,

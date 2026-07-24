@@ -5,6 +5,7 @@ import com.amandhakar.ledgerly.database.entity.AccountType
 import com.amandhakar.ledgerly.database.entity.AuditReason
 import com.amandhakar.ledgerly.database.entity.BalanceAnchorSource
 import com.amandhakar.ledgerly.database.entity.Direction
+import com.amandhakar.ledgerly.database.entity.ParseClass
 import com.amandhakar.ledgerly.database.entity.ParseStatus
 import com.amandhakar.ledgerly.database.entity.ParserTxnType
 import com.amandhakar.ledgerly.database.entity.SenderType
@@ -20,6 +21,9 @@ import com.amandhakar.ledgerly.database.entity.TransactionStatus
 class Converters {
     @TypeConverter fun parseStatusToString(value: ParseStatus): String = value.name
     @TypeConverter fun stringToParseStatus(value: String): ParseStatus = ParseStatus.valueOf(value)
+
+    @TypeConverter fun parseClassToString(value: ParseClass): String = value.name
+    @TypeConverter fun stringToParseClass(value: String): ParseClass = ParseClass.valueOf(value)
 
     @TypeConverter fun senderTypeToString(value: SenderType): String = value.name
     @TypeConverter fun stringToSenderType(value: String): SenderType = SenderType.valueOf(value)

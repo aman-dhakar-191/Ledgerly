@@ -36,7 +36,7 @@ import com.amandhakar.ledgerly.database.entity.TransactionAudit
         TransactionAudit::class,
         BalanceAnchor::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -59,6 +59,6 @@ abstract class LedgerlyDatabase : RoomDatabase() {
          * schema version as a plain constant, not the `@Database` annotation on the class it's
          * currently running.
          */
-        const val SCHEMA_VERSION = 3
+        const val SCHEMA_VERSION = 4
     }
 }
