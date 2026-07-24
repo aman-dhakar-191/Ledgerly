@@ -95,6 +95,7 @@ fun InitializationScreen(onBack: () -> Unit, viewModel: InitializationViewModel 
     }
 }
 
+@Suppress("LongParameterList") // one field per piece of state this row needs to render and act on
 @Composable
 private fun AccountAnchorRow(
     account: Account,
