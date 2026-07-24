@@ -147,14 +147,18 @@ Stop and ask the user before:
 
 ## Current phase
 
-**Phase 1 — Ledger that works.** See `tasks/phase-1.md`.
+**Phase 2 — Correctness.** See `tasks/phase-2.md`.
 
-Phase 0 complete: all CI-verifiable criteria green. Device-only items (Keystore
-hardware backing, biometric flows, Argon2id timing on-phone) still outstanding —
-verify on a real device but they do not block Phase 1.
+Phase 1 tasks complete. The Phase 1 exit criterion — two weeks of daily use with
+zero silent wrong entries — is still being served; Phase 2 may proceed in
+parallel, but Phase 3 must not start until it passes.
 
-Out of scope right now: transfers, card liability, categories, budgets,
-investments, Firestore sync, LLM anything.
+**Outstanding debt:** `FLAG_SECURE` is intentionally disabled to allow
+screenshots during development (`docs/crypto.md`). Re-enable before the app holds
+data worth protecting. Do not let this ship disabled.
+
+Out of scope right now: categories, budgets, investments, Firestore sync, LLM
+anything, loans and EMI amortisation.
 
 ---
 
@@ -169,6 +173,30 @@ investments, Firestore sync, LLM anything.
 | `docs/ci.md` | GitHub Actions, signing, in-app updates |
 | `docs/signing.md` | Keystore generation, backup, rotation limits |
 | `docs/phases.md` | Full roadmap |
+
+## Task files
+
+All phases are written. **Work only the current phase.**
+
+| File | Phase | Written against |
+|---|---|---|
+| `tasks/phase-0.md` | Foundation | ✔ complete |
+| `tasks/phase-1.md` | Ledger | ✔ complete |
+| `tasks/phase-2.md` | Correctness | real corpus |
+| `tasks/phase-3.md` | Budget | **ahead of data** |
+| `tasks/phase-4.md` | Investments | **ahead of data** |
+| `tasks/phase-5.md` | Sync | crypto spec, untested vs Firestore |
+| `tasks/phase-6.md` | Intelligence | needs baselines first |
+| `tasks/phase-7.md` | Liabilities | **ahead of data** |
+| `tasks/update-system.md` | update worker | ✔ complete |
+
+Phases 0–2 were specified against a real 5,613-message SMS corpus. Phases 3, 4
+and 7 were written before the data they depend on exists, and each carries a
+dependency note at the top saying what to verify first.
+
+**When a spec written ahead of data contradicts observed behaviour, the
+observation wins.** Update the spec and `docs/corpus-findings.md` rather than
+forcing the code to match a guess.
 
 ---
 
