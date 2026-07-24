@@ -7,10 +7,10 @@
 | | |
 |---|---|
 | App name | Ledgerly |
-| Package | `com.<owner>.ledgerly` |
+| Package | `com.amandhakar.ledgerly` |
 | Room database | `ledgerly.db` |
 | Keystore alias | `ledgerly_kwk` |
-| Firebase project | `ledgerly-<unique>` |
+| Firebase project | `ledgerly-<unique>` (Phase 5 only) |
 
 These are fixed. The Keystore alias and database name must not change after any
 encrypted data exists — renaming either requires re-deriving the master key from
@@ -30,10 +30,27 @@ cloud backup.
 - Room (SQLite) — source of truth
 - WorkManager — all background processing
 - Hilt — DI
-- Firebase Auth (identity only) + Firestore (encrypted blob storage only)
+- Firebase Auth + Firestore — **Phase 5 only**, free Spark tier. Do not add the
+  Firebase plugin, `google-services.json`, or any Firebase dependency before
+  Phase 5. No GCP services, no Cloud Functions, no paid tier.
 - Tink or AndroidX Security Crypto for AES-GCM; Argon2id via a vetted JVM binding
 - kotlinx.serialization
 - Testing: JUnit5, Robolectric, Turbine, Room in-memory
+
+---
+
+## Modules
+
+```
+:app                  Compose UI, DI wiring
+:core:model           Paise, entities, blob serializer   [pure Kotlin]
+:core:crypto-engine   Argon2id, HKDF, AES-GCM            [pure Kotlin]
+:core:crypto          Keystore, BiometricPrompt          [Android]
+:core:database        Room, DAOs, migrations             [Android]
+```
+
+Pure-Kotlin modules are unit-testable in CI. Keep security primitives there —
+see `docs/crypto.md` for why the crypto split must not be merged.
 
 ---
 
@@ -91,6 +108,27 @@ These are not preferences. Violating any of them is a bug.
 
 10. **Offline-first.** Every feature works with no network. Sync is additive.
 
+11. **The release signing keystore must never change.** Android treats a
+    differently signed APK as a different app: update fails, and uninstalling to
+    fix it destroys app-private storage including the Keystore-wrapped master
+    key. Back up `release.keystore.jks` and its passwords offline.
+
+12. **No financial data in notifications.** Amounts, balances, merchants and
+    account numbers never appear in a notification, at any priority. Lock-screen
+    previews are visible to anyone holding the phone. Notifications may say that
+    something needs review; they may not say what it was.
+
+---
+
+## Distribution
+
+Sideloaded via GitHub Releases, built by GitHub Actions, updated by an in-app
+worker. Not Play Store. See `docs/ci.md`.
+
+Unit tests gate every build. Device-only tests (Keystore hardware backing,
+biometrics, Argon2id timing) cannot run in CI and must be verified manually on a
+real phone — a green CI badge does not mean Phase 0 passed.
+
 ---
 
 ## Ask before doing
@@ -122,6 +160,7 @@ investments, sync, LLM anything.
 | `docs/schema.md` | Entities, fields, relationships |
 | `docs/crypto.md` | Key hierarchy, blob format, biometric unlock |
 | `docs/parser.md` | Rule format, learning flow, classification |
+| `docs/ci.md` | GitHub Actions, signing, in-app updates |
 | `docs/phases.md` | Full roadmap |
 
 ---
