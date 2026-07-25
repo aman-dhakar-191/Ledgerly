@@ -545,3 +545,40 @@ alongside real institutions.
 is. `isPersonalNumber()` (`core/parser/Sender.kt`) gates on that before
 `classify()` ever runs, so a personal number is marked `IGNORED` immediately
 and never reaches sender registration or the classification screen.
+
+---
+
+## 15. Alphanumeric non-financial senders also reach the gate — VAHAN, telecoms, etc.
+
+§14's fix only excludes personal phone numbers. A real inbox also has DLT
+alphanumeric senders that are legitimate institutions but not financial ones —
+`VAHAN` (India's vehicle-registration authority; challan-paid notices use
+money language), `Airtel` (recharge/bill-paid receipts), and similar. These
+have the same shape as a real bank sender ID, so `isPersonalNumber()` can't
+filter them, and `classify()`'s content-only heuristic still defaults them to
+`TRANSACTION`.
+
+**This is not a bug to fix at the pre-filter** — a government agency's SMS
+format isn't predictable enough to hardcode, and misclassifying a real bank
+as "not financial" would be far worse than the reverse. The sender-
+classification screen already has an honest answer: `SenderType.UNKNOWN`
+(stored on every sender by default until classified) is now offered as a
+button, labelled "NOT FINANCIAL" — same untrusted/never-parsed outcome as
+`SPAM`/`PROMO`, just not mislabelling a non-financial institution as spam.
+
+**ATM withdrawals and card spends are not separate institutions.** An ATM
+withdrawal SMS (§6/Task 2.7) comes from the same sender as the issuing bank's
+regular debit notifications — classify the institution as `BANK`, same as
+any other message from it. A debit card purchase is likewise drawn from the
+linked bank account — `BANK`. A credit card is `CARD` only when its messages
+arrive from a genuinely distinct sender/institution string (Task 2.3 models
+it as its own liability account, never mixed into bank reconciliation) — if
+one institution's raw senders mix both debit and credit-card message shapes
+under a single normalised institution, that is a real limitation of one
+classification per institution and needs revisiting once Phase 2's credit-
+card-as-liability work exposes it in practice.
+
+**`SenderType.BANK` vs `CARD` has no behavioural difference today** — both
+set `trusted = true` identically; the type value is stored but not yet read
+anywhere else in the app. It becomes load-bearing once Phase 2 needs to tell
+a credit-card liability account apart from a bank account at ingest time.

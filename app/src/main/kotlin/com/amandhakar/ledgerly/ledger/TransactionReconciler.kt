@@ -45,3 +45,8 @@ fun ParserDirection.toEntityDirection(): EntityDirection = when (this) {
     ParserDirection.DEBIT -> EntityDirection.DEBIT
     ParserDirection.CREDIT -> EntityDirection.CREDIT
 }
+
+fun EntityDirection.toParserDirection(): ParserDirection = when (this) {
+    EntityDirection.DEBIT -> ParserDirection.DEBIT
+    EntityDirection.CREDIT -> ParserDirection.CREDIT
+}
