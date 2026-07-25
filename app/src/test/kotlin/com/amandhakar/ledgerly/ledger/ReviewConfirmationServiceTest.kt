@@ -49,6 +49,7 @@ class ReviewConfirmationServiceTest {
             reconciler,
             LedgerSettingsStore(ApplicationProvider.getApplicationContext()),
             CardPaymentMatcher(db.transactionDao(), db.rawSmsDao(), db.accountDao(), db.transferDao()),
+            db.cardStatementDao(),
         )
         service = ReviewConfirmationService(
             db.transactionDao(),

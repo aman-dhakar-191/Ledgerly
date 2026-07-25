@@ -2,6 +2,7 @@ package com.amandhakar.ledgerly.ledger
 
 import com.amandhakar.ledgerly.database.dao.AccountDao
 import com.amandhakar.ledgerly.database.dao.BalanceAnchorDao
+import com.amandhakar.ledgerly.database.dao.CardStatementDao
 import com.amandhakar.ledgerly.database.dao.ParserRuleDao
 import com.amandhakar.ledgerly.database.dao.PayeeAllowlistDao
 import com.amandhakar.ledgerly.database.dao.RawSmsDao
@@ -9,6 +10,7 @@ import com.amandhakar.ledgerly.database.dao.SenderRegistryDao
 import com.amandhakar.ledgerly.database.dao.TransactionDao
 import com.amandhakar.ledgerly.database.entity.Account
 import com.amandhakar.ledgerly.database.entity.AccountType
+import com.amandhakar.ledgerly.database.entity.CardStatement
 import com.amandhakar.ledgerly.database.entity.ParseStatus
 import com.amandhakar.ledgerly.database.entity.ParserRule
 import com.amandhakar.ledgerly.database.entity.ParserTxnType
@@ -25,6 +27,8 @@ import com.amandhakar.ledgerly.parser.GenericExtractor
 import com.amandhakar.ledgerly.parser.MatchOutcome
 import com.amandhakar.ledgerly.parser.ParseClass
 import com.amandhakar.ledgerly.parser.ReconciliationResult
+import com.amandhakar.ledgerly.parser.StatementAmounts
+import com.amandhakar.ledgerly.parser.StatementExtractor
 import com.amandhakar.ledgerly.parser.capturedFields
 import com.amandhakar.ledgerly.parser.classify
 import com.amandhakar.ledgerly.parser.isPersonalNumber
@@ -33,6 +37,7 @@ import com.amandhakar.ledgerly.parser.normalizeSender
 import com.amandhakar.ledgerly.parser.outstandingFromAvailableLimit
 import java.util.UUID
 import javax.inject.Inject
+import kotlin.math.abs
 import kotlinx.coroutines.flow.first
 import com.amandhakar.ledgerly.database.entity.Direction as EntityDirection
 import com.amandhakar.ledgerly.database.entity.ParseClass as EntityParseClass
@@ -62,6 +67,7 @@ class SmsParsingPipeline @Inject constructor(
     private val transactionReconciler: TransactionReconciler,
     private val ledgerSettingsStore: LedgerSettingsStore,
     private val cardPaymentMatcher: CardPaymentMatcher,
+    private val cardStatementDao: CardStatementDao,
 ) {
     suspend fun processUnprocessed() {
         rawSmsDao.getByStatus(ParseStatus.UNPROCESSED).forEach { processOne(it) }
@@ -108,7 +114,10 @@ class SmsParsingPipeline @Inject constructor(
 
         val parseClass = classify(sms.body)
 
-        if (parseClass != ParseClass.TRANSACTION) {
+        // Task 2.4: a statement is never a transaction, but it's still real financial data from a
+        // trusted sender - it goes through the same trust/ledger-start gates as TRANSACTION, just
+        // diverges below them instead of falling into Tier 1/2.
+        if (parseClass != ParseClass.TRANSACTION && parseClass != ParseClass.STATEMENT) {
             markTerminal(sms, institution, parseClass, ParseStatus.IGNORED)
             return
         }
@@ -123,6 +132,11 @@ class SmsParsingPipeline @Inject constructor(
         if (ledgerStartDate == null || sms.receivedAt < ledgerStartDate) {
             // Task 1.10: messages before ledger_start_date stay RawSms, never become transactions.
             markTerminal(sms, institution, parseClass, ParseStatus.IGNORED)
+            return
+        }
+
+        if (parseClass == ParseClass.STATEMENT) {
+            processStatement(sms, institution, sender)
             return
         }
 
@@ -154,6 +168,83 @@ class SmsParsingPipeline @Inject constructor(
         if (transaction != null) cardPaymentMatcher.tryMatch(transaction)
         maybeReanchorCreditCardOutstanding(account, extraction, extraction.occurredAt.value ?: sms.receivedAt)
         markTerminal(sms, institution, parseClass, ParseStatus.REVIEW)
+    }
+
+    /**
+     * Task 2.4/docs/corpus-findings.md §6: a statement is never a transaction - it only sets the
+     * card's due amounts and date, and runs the reconciliation check against transactions since
+     * the last statement.
+     */
+    private suspend fun processStatement(sms: RawSms, institution: String, sender: SenderRegistry) {
+        val amounts = StatementExtractor.extractAmounts(sms.body)
+        val extraction = amounts?.let { GenericExtractor.extract(sms.body, sms.receivedAt) }
+        val dueDate = extraction?.occurredAt?.value
+        val account = extraction?.let { resolveAccount(sender, it) }
+
+        if (amounts == null || dueDate == null || account == null) {
+            markTerminal(sms, institution, ParseClass.STATEMENT, ParseStatus.REVIEW)
+            return
+        }
+
+        val statement = writeCardStatement(sms, account, amounts, dueDate)
+        if (statement != null) reconcileStatementOutstanding(sms, account, statement)
+        markTerminal(sms, institution, ParseClass.STATEMENT, ParseStatus.PARSED)
+    }
+
+    private suspend fun writeCardStatement(sms: RawSms, account: Account, amounts: StatementAmounts, dueDate: Long): CardStatement? {
+        if (cardStatementDao.getByRawSmsId(sms.id) != null) return null
+        val now = System.currentTimeMillis()
+        val statement = CardStatement(
+            id = UUID.randomUUID().toString(),
+            accountId = account.id,
+            totalDue = amounts.totalDue,
+            minimumDue = amounts.minimumDue,
+            dueDate = dueDate,
+            statementDate = sms.receivedAt,
+            rawSmsId = sms.id,
+            createdAt = now,
+            updatedAt = now,
+            deletedAt = null,
+        )
+        cardStatementDao.insert(statement)
+        return statement
+    }
+
+    /**
+     * tasks/phase-2.md's reconciliation check: compare `sum(card transactions since last
+     * statement)` against this statement's total - a mismatch means a missed message, interest, or
+     * fees, so it creates a flagged [TransactionSource.ADJUSTMENT] entry rather than silently
+     * accepting either number. Nothing to compare against for a card's first-ever statement.
+     */
+    private suspend fun reconcileStatementOutstanding(sms: RawSms, account: Account, statement: CardStatement) {
+        val previous = cardStatementDao.getLatestBefore(account.id, statement.statementDate) ?: return
+        val signedSum = transactionDao.getSignedSumSinceAnchor(account.id, previous.statementDate, statement.statementDate)
+        // signedSum is a change in balance (DEBIT subtracts); outstanding moves the opposite way.
+        val expected = previous.totalDue - signedSum
+        val diff = statement.totalDue - expected
+        if (diff == 0L) return
+
+        val now = System.currentTimeMillis()
+        transactionDao.insert(
+            Transaction(
+                id = UUID.randomUUID().toString(),
+                accountId = account.id,
+                amount = abs(diff),
+                direction = if (diff > 0) EntityDirection.DEBIT else EntityDirection.CREDIT,
+                occurredAt = statement.statementDate,
+                merchantRaw = "Statement reconciliation adjustment",
+                balanceAfter = null,
+                rawSmsId = sms.id,
+                source = TransactionSource.ADJUSTMENT,
+                status = TransactionStatus.PENDING_REVIEW,
+                transferId = null,
+                isInternal = false,
+                notes = "Expected outstanding $expected from transactions since the last statement; this one states ${statement.totalDue}.",
+                createdAt = now,
+                updatedAt = now,
+                deletedAt = null,
+            ),
+        )
     }
 
     /**
@@ -362,6 +453,7 @@ private fun ParseClass.toEntityParseClass(): EntityParseClass = when (this) {
     ParseClass.TRANSACTION -> EntityParseClass.TRANSACTION
     ParseClass.OTP -> EntityParseClass.OTP
     ParseClass.DECLINED -> EntityParseClass.DECLINED
+    ParseClass.STATEMENT -> EntityParseClass.STATEMENT
     ParseClass.SI_UPCOMING -> EntityParseClass.SI_UPCOMING
     ParseClass.SI_FAILED -> EntityParseClass.SI_FAILED
     ParseClass.AUTOPAY_SCHEDULED -> EntityParseClass.AUTOPAY_SCHEDULED

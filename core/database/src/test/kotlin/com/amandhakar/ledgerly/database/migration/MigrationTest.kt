@@ -193,4 +193,25 @@ class MigrationTest {
             assertThat(cursor.getString(cursor.getColumnIndexOrThrow("kind"))).isEqualTo("ACCOUNT_TO_ACCOUNT")
         }
     }
+
+    /** Task 2.4/docs/schema.md: a fresh table, not an alteration - just needs to exist and accept a row. */
+    @Test
+    fun `migrate 6 to 7 creates the card_statement table`() {
+        helper.createDatabase(testDbName, 6).apply { close() }
+
+        val migrated = helper.runMigrationsAndValidate(testDbName, 7, true, MIGRATION_6_7)
+
+        migrated.execSQL(
+            """
+            INSERT INTO card_statement (
+                id, account_id, total_due, minimum_due, due_date, statement_date, raw_sms_id, created_at, updated_at, deleted_at
+            )
+            VALUES ('stmt-1', 'acct-1', 1039194, 52000, 1700000000000, 1699000000000, NULL, 1700000000000, 1700000000000, NULL)
+            """.trimIndent(),
+        )
+        migrated.query("SELECT * FROM card_statement WHERE id = 'stmt-1'").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getLong(cursor.getColumnIndexOrThrow("total_due"))).isEqualTo(1039194)
+        }
+    }
 }

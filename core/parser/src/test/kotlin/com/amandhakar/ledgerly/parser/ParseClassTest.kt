@@ -57,6 +57,20 @@ class ParseClassTest {
     }
 
     @Test
+    fun `a statement is never a transaction even though it also says 'is due by'`() {
+        val body = "ICICI Bank Credit Card XX6001 Statement is sent to a***@gmail.com. " +
+            "Total of Rs 10,391.94 or minimum of Rs 520.00 is due by 30-JUL-26."
+        assertThat(classify(body)).isEqualTo(ParseClass.STATEMENT)
+    }
+
+    @Test
+    fun `the 'pay total amount due' statement variant is also a statement`() {
+        val body = "Pay Total Amount Due of Rs 6,941.21 or Minimum Amount Due of Rs 2,170.00 " +
+            "by 23-Jul-26 towards ICICI Bank Credit Card XX5001."
+        assertThat(classify(body)).isEqualTo(ParseClass.STATEMENT)
+    }
+
+    @Test
     fun `a collect request is not a debit`() {
         val body = "SMARTWORKS TECH SOLUTIONS PVT has requested money from you on your AMAZON app. " +
             "On approving the request, Rs.140.00 will be debited from your a/c."

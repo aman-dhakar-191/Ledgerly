@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.amandhakar.ledgerly.database.LedgerlyDatabase
 import com.amandhakar.ledgerly.database.dao.AccountDao
 import com.amandhakar.ledgerly.database.dao.BalanceAnchorDao
+import com.amandhakar.ledgerly.database.dao.CardStatementDao
 import com.amandhakar.ledgerly.database.dao.GoldenTestDao
 import com.amandhakar.ledgerly.database.dao.ParserRuleDao
 import com.amandhakar.ledgerly.database.dao.PayeeAllowlistDao
@@ -43,4 +44,5 @@ object DatabaseModule {
     @Provides fun provideBalanceAnchorDao(db: LedgerlyDatabase): BalanceAnchorDao = db.balanceAnchorDao()
     @Provides fun providePayeeAllowlistDao(db: LedgerlyDatabase): PayeeAllowlistDao = db.payeeAllowlistDao()
     @Provides fun provideTransferDao(db: LedgerlyDatabase): TransferDao = db.transferDao()
+    @Provides fun provideCardStatementDao(db: LedgerlyDatabase): CardStatementDao = db.cardStatementDao()
 }
