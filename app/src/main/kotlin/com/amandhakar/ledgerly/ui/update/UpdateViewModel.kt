@@ -42,11 +42,12 @@ class UpdateViewModel @Inject constructor(
             _uiState.value = try {
                 val info = updateChecker.checkForUpdate()
                 if (info == null) UpdateUiState.UpToDate else UpdateUiState.Available(info)
-            } catch (
-                @Suppress("SwallowedException") // shown to the user as a plain failure state, not logged
-                e: IOException,
-            ) {
-                UpdateUiState.Failed("Couldn't check for updates. Check your connection and try again.")
+            } catch (e: IOException) {
+                // The reason (timeout, DNS failure, HTTP status) matters - a generic message here
+                // makes "no internet" indistinguishable from "GitHub rejected the request", which
+                // cost real debugging time before this was surfaced.
+                val reason = e.message ?: e::class.simpleName ?: "unknown error"
+                UpdateUiState.Failed("Couldn't check for updates ($reason). Check your connection and try again.")
             }
         }
     }
