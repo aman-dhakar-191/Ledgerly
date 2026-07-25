@@ -18,8 +18,16 @@ object GenericExtractor {
         """(?i)(?:debited|credited)\s+(?:by|for|with)?\s*(\d[\d,]*(?:\.\d{1,2})?|\.\d{1,2})"""
     )
     private val LIMIT_GUARD = Regex("(?i)limit")
-    /** ICICI's "To dispute call ... or SMS BLOCK ### to ##########" disclaimer - never a merchant. */
-    private val DISPUTE_FOOTER = Regex("(?i)to dispute call\\b.*")
+    /**
+     * Known trailing disclaimer/customer-service footers - ICICI's "To dispute call ... or SMS
+     * BLOCK ### to ##########" and axio's "To report misuse call ##########" - never a merchant,
+     * but the "\bto\s+" merchant anchor below would otherwise capture one whole when the preceding
+     * sentence ends with no space before it.
+     */
+    private val DISCLAIMER_FOOTERS = listOf(
+        Regex("(?i)to dispute call\\b.*"),
+        Regex("(?i)to report misuse call\\b.*"),
+    )
     private val BALANCE_LABEL = Regex(
         """(?i)(avl\s*bal|avb\s*bal|avbl\s*bal|available\s*balance|updated\s*balance\s*is|""" +
             """updated\s*balance\s*:|\bbal\b)\.?\s*[:.]?\s*(?:rs\.?|inr|₹)?\s*(\d[\d,]*(?:\.\d{1,2})?|\.\d{1,2})"""
@@ -37,6 +45,13 @@ object GenericExtractor {
      * matches, so a "successful" appearing alongside a real credit/refund verb never overrides it.
      */
     private val PAYMENT_SUCCESSFUL = Regex("(?i)payment of.*?\\bsuccessful\\b")
+    /**
+     * docs/corpus-findings.md §10's axio BNPL spend formats ("Thank you for availing Pay Later
+     * credit of Rs{amt}" / "Thanks for availing Rs{amt} Pay Later credit") - despite the word
+     * "credit", this is money the user just spent (a draw against their Pay Later line), a DEBIT,
+     * and carries none of [DEBIT_VERBS]'s words either.
+     */
+    private val BNPL_SPEND = Regex("(?i)\\bavailing\\b.*\\bpay later\\b")
 
     private val ACCOUNT_ANCHOR = Regex(
         """(?i)(?:a/c|acct|acc|account|card)s?\.?\s*(?:no\.?\s*)?([Xx*0-9]{3,})"""
@@ -144,6 +159,7 @@ object GenericExtractor {
             credit?.let { it to Direction.CREDIT },
         ).minByOrNull { it.first.range.first }
             ?: PAYMENT_SUCCESSFUL.find(body)?.let { it to Direction.DEBIT }
+            ?: BNPL_SPEND.find(body)?.let { it to Direction.DEBIT }
             ?: return ExtractedField.empty()
         return ExtractedField(winner.second, 1f, winner.first.range)
     }
@@ -158,10 +174,7 @@ object GenericExtractor {
     }
 
     private fun extractMerchant(body: String): ExtractedField<String> {
-        // ICICI's "...Avl Bal Rs. X.To dispute call ... or SMS BLOCK ### to ##########" footer runs
-        // on with no space after the period, so it reads as one sentence - the "\bto\s+" anchor
-        // below would otherwise capture this disclaimer whole as a "merchant".
-        val footerStart = DISPUTE_FOOTER.find(body)?.range?.first
+        val footerStart = DISCLAIMER_FOOTERS.mapNotNull { it.find(body)?.range?.first }.minOrNull()
         val found = MERCHANT_ANCHORS.firstNotNullOfOrNull { anchor -> matchMerchant(body, anchor, footerStart) }
         return found ?: ExtractedField.empty()
     }

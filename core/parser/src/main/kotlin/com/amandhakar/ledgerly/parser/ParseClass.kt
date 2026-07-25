@@ -10,6 +10,7 @@ enum class ParseClass {
     OTP,
     DECLINED,
     STATEMENT,
+    CREDIT_LIMIT_CHANGE,
     SI_UPCOMING,
     SI_FAILED,
     AUTOPAY_SCHEDULED,
@@ -22,12 +23,16 @@ enum class ParseClass {
 // broader pattern below it, and every discriminator here can appear anywhere in the body — the
 // corpus puts most of them *after* the amount, so this can never stop at the first amount match.
 // STATEMENT must be checked before SI_UPCOMING: docs/corpus-findings.md §6's first statement
-// format ("Total of Rs X or minimum of Rs Y is due by DATE") itself contains "is due by".
+// format ("Total of Rs X or minimum of Rs Y is due by DATE") itself contains "is due by"; axio's
+// BNPL_BILL_DUE ("Your Pay Later bill of Rs X will be debited...") is the same shape (§10).
 private val TRANSACTION_OVERRIDE = Regex("(?i)successfully processed payment of")
 private val DISCRIMINATORS = listOf(
     ParseClass.OTP to Regex("(?i)one-time password|\\botp\\b"),
     ParseClass.DECLINED to Regex("(?i)declined due to|is declined, as"),
-    ParseClass.STATEMENT to Regex("(?i)statement is sent to|total amount due of"),
+    ParseClass.STATEMENT to Regex("(?i)statement is sent to|total amount due of|pay later bill of"),
+    // axio's BNPL_LIMIT_CHANGE (docs/corpus-findings.md §10): "Approved credit for your Pay Later
+    // account has been modified to Rs. X" - not a transaction, updates Account.credit_limit.
+    ParseClass.CREDIT_LIMIT_CHANGE to Regex("(?i)has been modified to"),
     ParseClass.SI_UPCOMING to Regex("(?i)is due by|to be debited from"),
     ParseClass.SI_FAILED to Regex("(?i)could not be processed"),
     ParseClass.AUTOPAY_SCHEDULED to Regex("(?i)is scheduled on|for the upcoming mandate set for"),

@@ -88,6 +88,25 @@ class GenericExtractorTest {
     }
 
     @Test
+    fun `the axio BNPL spend format is recognised as a debit with no merchant`() {
+        val body = "Thank you for availing Pay Later credit of Rs656.7. For more info click http://example.com " +
+            "To report misuse call 18009877678 -axio"
+        val result = GenericExtractor.extract(body, someReceivedAt)
+        assertThat(result.amount.value).isEqualTo(65_670L)
+        assertThat(result.direction.value).isEqualTo(Direction.DEBIT)
+        assertThat(result.merchant.value).isNull()
+    }
+
+    @Test
+    fun `the axio EMI-eligible BNPL spend variant also parses as a debit`() {
+        val body = "Thanks for availing Rs4848.99 Pay Later credit. For more info on EMI, Rate of " +
+            "Interest & Tenure click http://example.com -axio"
+        val result = GenericExtractor.extract(body, someReceivedAt)
+        assertThat(result.amount.value).isEqualTo(484_899L)
+        assertThat(result.direction.value).isEqualTo(Direction.DEBIT)
+    }
+
+    @Test
     fun `missing date falls back to receivedAt`() {
         val body = "Payment of Rs 114.00 using Apay Balance successful at merchant. " +
             "Updated Balance is Rs 267.98 - SMS by Juspay"

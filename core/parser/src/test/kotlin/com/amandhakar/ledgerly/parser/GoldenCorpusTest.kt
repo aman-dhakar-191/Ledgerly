@@ -205,12 +205,14 @@ class GoldenCorpusTest {
     }
 
     @Test
-    fun `axio monthly bill has a space and no decimals`() {
+    fun `axio monthly bill has a space and no decimals, and is a statement, not a transaction`() {
+        // Task 2.6: BNPL_BILL_DUE sets the expected settlement amount/date, it never becomes a
+        // transaction itself - the real debit is the separate ICICI-to-CAPITALFLOAT settlement.
         val body = "Your Pay Later bill of Rs 1698 will be debited on 5th of this month from " +
             "registered bank a/c. View Bill http://axio.example"
-        assertThat(classify(body)).isEqualTo(ParseClass.TRANSACTION)
-        val e = GenericExtractor.extract(body, receivedAt)
-        assertThat(e.amount.value).isEqualTo(169_800L)
+        assertThat(classify(body)).isEqualTo(ParseClass.STATEMENT)
+        val amounts = StatementExtractor.extractAmounts(body)
+        assertThat(amounts?.totalDue).isEqualTo(169_800L)
     }
 
     @Test

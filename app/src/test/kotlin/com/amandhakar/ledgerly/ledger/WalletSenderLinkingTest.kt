@@ -68,4 +68,15 @@ class WalletSenderLinkingTest {
     fun `an institution with no senders seen yet links nothing and does not throw`() = runTest {
         linkSendersToAccount(db.senderRegistryDao(), "JUSPAY", "wallet-1", now = 1_000L)
     }
+
+    @Test
+    fun `a mixed-case stored institution (axioFS) still matches a differently-cased typed institution`() = runTest {
+        // normalizeSender preserves the raw sender ID's own casing - axio's is mixed-case, unlike
+        // JUSPAY/ZOMATO's incidental all-caps - so this only works via case-insensitive matching.
+        untrustedSender("JX-axioFS-S", "axioFS")
+
+        linkSendersToAccount(db.senderRegistryDao(), "AXIOFS", "bnpl-1", now = 1_000L)
+
+        assertThat(db.senderRegistryDao().getById("JX-axioFS-S")!!.accountId).isEqualTo("bnpl-1")
+    }
 }
