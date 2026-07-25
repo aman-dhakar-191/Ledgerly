@@ -37,6 +37,7 @@ class ReviewConfirmationServiceTest {
         db = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), LedgerlyDatabase::class.java)
             .allowMainThreadQueries()
             .build()
+        val reconciler = TransactionReconciler(db.balanceAnchorDao(), db.transactionDao())
         val pipeline = SmsParsingPipeline(
             db.rawSmsDao(),
             db.senderRegistryDao(),
@@ -45,7 +46,7 @@ class ReviewConfirmationServiceTest {
             db.parserRuleDao(),
             db.balanceAnchorDao(),
             db.payeeAllowlistDao(),
-            TransactionReconciler(db.balanceAnchorDao(), db.transactionDao()),
+            reconciler,
             LedgerSettingsStore(ApplicationProvider.getApplicationContext()),
         )
         service = ReviewConfirmationService(
@@ -55,6 +56,9 @@ class ReviewConfirmationServiceTest {
             db.goldenTestDao(),
             db.transactionAuditDao(),
             db.payeeAllowlistDao(),
+            db.accountDao(),
+            db.balanceAnchorDao(),
+            reconciler,
             pipeline,
         )
     }

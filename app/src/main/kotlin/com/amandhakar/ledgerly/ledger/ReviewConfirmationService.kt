@@ -1,5 +1,7 @@
 package com.amandhakar.ledgerly.ledger
 
+import com.amandhakar.ledgerly.database.dao.AccountDao
+import com.amandhakar.ledgerly.database.dao.BalanceAnchorDao
 import com.amandhakar.ledgerly.database.dao.GoldenTestDao
 import com.amandhakar.ledgerly.database.dao.ParserRuleDao
 import com.amandhakar.ledgerly.database.dao.PayeeAllowlistDao
@@ -17,6 +19,7 @@ import com.amandhakar.ledgerly.database.entity.TransactionStatus
 import com.amandhakar.ledgerly.parser.GenericExtraction
 import com.amandhakar.ledgerly.parser.GenericExtractor
 import com.amandhakar.ledgerly.parser.MatchOutcome
+import com.amandhakar.ledgerly.parser.ReconciliationResult
 import com.amandhakar.ledgerly.parser.generateRule
 import com.amandhakar.ledgerly.parser.matchWithTimeout
 import java.util.UUID
@@ -42,6 +45,9 @@ class ReviewConfirmationService @Inject constructor(
     private val goldenTestDao: GoldenTestDao,
     private val transactionAuditDao: TransactionAuditDao,
     private val payeeAllowlistDao: PayeeAllowlistDao,
+    private val accountDao: AccountDao,
+    private val balanceAnchorDao: BalanceAnchorDao,
+    private val transactionReconciler: TransactionReconciler,
     private val smsParsingPipeline: SmsParsingPipeline,
 ) {
     suspend fun confirm(transaction: Transaction, correction: ReviewCorrection) {
@@ -68,6 +74,7 @@ class ReviewConfirmationService @Inject constructor(
                 updatedAt = now,
             ),
         )
+        reconcileAndReanchor(transaction, correction)
 
         val rawSms = transaction.rawSmsId?.let { rawSmsDao.getById(it) } ?: return
         val extraction = GenericExtractor.extract(rawSms.body, rawSms.receivedAt)
@@ -95,6 +102,27 @@ class ReviewConfirmationService @Inject constructor(
         // parse_status IN (REVIEW, FAILED) for that sender" - other pending messages this exact
         // shape already covers shouldn't wait for their own individual confirmation.
         if (rule != null) smsParsingPipeline.backfillRule(rule)
+    }
+
+    /**
+     * A confirmed transaction that carries a stated balance must reconcile and re-anchor exactly
+     * like a Tier-1 rule match does (docs/corpus-findings.md §2) - without this, the account's
+     * cached balance only ever advances via *other* messages a newly-generated rule happens to
+     * backfill, never via the confirmation that generated the rule in the first place.
+     */
+    private suspend fun reconcileAndReanchor(transaction: Transaction, correction: ReviewCorrection) {
+        val balanceAfter = correction.balanceAfter ?: return
+        val reconciliation = transactionReconciler.reconcile(
+            transaction.accountId,
+            correction.occurredAt,
+            correction.amount,
+            correction.direction.toParserDirection(),
+            balanceAfter,
+        )
+        if (reconciliation is ReconciliationResult.Confirmed) {
+            val account = accountDao.getById(transaction.accountId) ?: return
+            reanchorAccount(accountDao, balanceAnchorDao, account, reconciliation.newBalance, correction.occurredAt)
+        }
     }
 
     @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this validation gate

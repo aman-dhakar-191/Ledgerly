@@ -8,8 +8,6 @@ import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.SenderRegistryDao
 import com.amandhakar.ledgerly.database.dao.TransactionDao
 import com.amandhakar.ledgerly.database.entity.Account
-import com.amandhakar.ledgerly.database.entity.BalanceAnchor
-import com.amandhakar.ledgerly.database.entity.BalanceAnchorSource
 import com.amandhakar.ledgerly.database.entity.ParseStatus
 import com.amandhakar.ledgerly.database.entity.ParserRule
 import com.amandhakar.ledgerly.database.entity.ParserTxnType
@@ -191,7 +189,9 @@ class SmsParsingPipeline @Inject constructor(
         val status = if (reconciliation is ReconciliationResult.Mismatch) TransactionStatus.PENDING_REVIEW else TransactionStatus.CONFIRMED
 
         writeRuleTransaction(sms, existing, account, amount, direction.toEntityDirection(), merchant, occurredAt, balanceAfter, status)
-        if (reconciliation is ReconciliationResult.Confirmed) reanchorAccount(account, reconciliation.newBalance, occurredAt)
+        if (reconciliation is ReconciliationResult.Confirmed) {
+            reanchorAccount(accountDao, balanceAnchorDao, account, reconciliation.newBalance, occurredAt)
+        }
 
         val terminalStatus = if (status == TransactionStatus.CONFIRMED) ParseStatus.PARSED else ParseStatus.REVIEW
         markTerminal(sms, institution, ParseClass.TRANSACTION, terminalStatus, rule.id)
@@ -309,26 +309,6 @@ class SmsParsingPipeline @Inject constructor(
                 deletedAt = null,
             ),
         )
-    }
-
-    /** docs/corpus-findings.md §2: "each successful reconciliation re-anchors the account." */
-    private suspend fun reanchorAccount(account: Account, newBalance: Long, asOf: Long) {
-        if (asOf < account.balanceAsOf) return // an out-of-order older message must not regress the cache
-        val now = System.currentTimeMillis()
-        balanceAnchorDao.insert(
-            BalanceAnchor(
-                id = UUID.randomUUID().toString(),
-                accountId = account.id,
-                balance = newBalance,
-                asOf = asOf,
-                source = BalanceAnchorSource.SMS_DERIVED,
-                note = null,
-                createdAt = now,
-                updatedAt = now,
-                deletedAt = null,
-            ),
-        )
-        accountDao.update(account.copy(currentBalance = newBalance, balanceAsOf = asOf, updatedAt = now))
     }
 
     private suspend fun markTerminal(
