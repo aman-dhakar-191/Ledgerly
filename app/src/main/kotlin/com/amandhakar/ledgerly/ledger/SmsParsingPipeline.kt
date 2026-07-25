@@ -28,6 +28,7 @@ import com.amandhakar.ledgerly.parser.ParseClass
 import com.amandhakar.ledgerly.parser.ReconciliationResult
 import com.amandhakar.ledgerly.parser.capturedFields
 import com.amandhakar.ledgerly.parser.classify
+import com.amandhakar.ledgerly.parser.isPersonalNumber
 import com.amandhakar.ledgerly.parser.matchWithTimeout
 import com.amandhakar.ledgerly.parser.normalizeSender
 import java.util.UUID
@@ -95,6 +96,15 @@ class SmsParsingPipeline @Inject constructor(
     @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this pipeline
     private suspend fun processOne(sms: RawSms) {
         val institution = normalizeSender(sms.sender)
+
+        // A personal contact's number is not an institution, no matter what the message body says
+        // (classify()'s TRANSACTION default is content-only and can't tell "bank debited Rs. 500"
+        // apart from a friend saying "I'll send you 500") — never surface it as a sender to classify.
+        if (isPersonalNumber(sms.sender)) {
+            markTerminal(sms, institution, ParseClass.UNKNOWN, ParseStatus.IGNORED)
+            return
+        }
+
         val parseClass = classify(sms.body)
 
         if (parseClass != ParseClass.TRANSACTION) {

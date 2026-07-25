@@ -2,6 +2,7 @@ package com.amandhakar.ledgerly.ui.sms
 
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -39,6 +40,8 @@ private const val RATIONALE = "Ledgerly reads your bank and card SMS to build yo
 fun SmsPermissionScreen(onDone: () -> Unit) {
     val context = LocalContext.current
     var deniedOnce by remember { mutableStateOf(false) }
+
+    BackHandler(onBack = onDone)
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),

@@ -526,3 +526,22 @@ Your payment of Rs.999 for the subscription to TAGMANGO PRIVATE LIMITED is
 successful. Any recurring subscription payments will be automatically charged
 to your UPI from now - Razorpay
 ```
+
+---
+
+## 14. Personal contacts reach the sender-trust gate — found in live use, not the corpus
+
+The 5,613-message corpus this doc is built from was pre-filtered to financial
+senders before analysis, so it never contained a case the real inbox does:
+casual messages between people, from a plain phone number, that happen to use
+money language ("send me 500", "paid you back"). `classify()`'s
+`TRANSACTION` default is text-only and has no way to tell that apart from a
+real bank debit — so on first sideload, personal contacts' numbers were showing
+up in the sender-classification screen (`BANK`/`CARD`/`OTP`/`PROMO`/`SPAM`)
+alongside real institutions.
+
+**Fix:** every DLT-registered institutional sender ID is alphanumeric
+(§1's `AD-ICICIT-S` family); a bare digit string of phone-number length never
+is. `isPersonalNumber()` (`core/parser/Sender.kt`) gates on that before
+`classify()` ever runs, so a personal number is marked `IGNORED` immediately
+and never reaches sender registration or the classification screen.

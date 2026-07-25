@@ -16,6 +16,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 data class AccountsUiState(
@@ -33,20 +34,23 @@ class AccountsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AccountsUiState())
     val uiState: StateFlow<AccountsUiState> = _uiState.asStateFlow()
 
+    // Raw archive scan, independent of which accounts already exist - re-filtered below every time
+    // either side changes, so an account added from a suggestion drops out immediately instead of
+    // waiting for a fresh loadSuggestions() call that may never come.
+    private val _rawSuggestions = MutableStateFlow<List<AccountSuggestion>>(emptyList())
+
     init {
         viewModelScope.launch {
-            accountDao.observeActive().collect { accounts ->
-                _uiState.value = _uiState.value.copy(accounts = accounts)
-            }
+            combine(accountDao.observeActive(), _rawSuggestions) { accounts, rawSuggestions ->
+                val known = accounts.mapNotNull { it.last4 }.toSet()
+                AccountsUiState(accounts = accounts, suggestions = rawSuggestions.filterNot { it.last4 in known })
+            }.collect { _uiState.value = it }
         }
     }
 
-    /** Suggestions whose last4 doesn't already match a known account — no point re-suggesting one. */
     fun loadSuggestions() {
         viewModelScope.launch {
-            val known = _uiState.value.accounts.mapNotNull { it.last4 }.toSet()
-            val suggestions = accountSuggestor.suggest().filterNot { it.last4 in known }
-            _uiState.value = _uiState.value.copy(suggestions = suggestions)
+            _rawSuggestions.value = accountSuggestor.suggest()
         }
     }
 

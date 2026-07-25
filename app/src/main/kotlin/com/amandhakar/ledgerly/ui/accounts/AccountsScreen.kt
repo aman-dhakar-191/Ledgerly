@@ -1,5 +1,6 @@
 package com.amandhakar.ledgerly.ui.accounts
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -40,6 +41,7 @@ fun AccountsScreen(onBack: () -> Unit, viewModel: AccountsViewModel = hiltViewMo
     var prefill by remember { mutableStateOf<AccountSuggestion?>(null) }
 
     LaunchedEffect(Unit) { viewModel.loadSuggestions() }
+    BackHandler(onBack = onBack)
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),

@@ -1,5 +1,6 @@
 package com.amandhakar.ledgerly.ui.review
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,6 +52,8 @@ private const val CONFIDENT_THRESHOLD = 0.9f
 @Composable
 fun ReviewInboxScreen(onBack: () -> Unit, viewModel: ReviewInboxViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
+
+    BackHandler(onBack = onBack)
 
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
