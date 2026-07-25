@@ -207,10 +207,11 @@ private fun TransferSection(transaction: Transaction, viewModel: LedgerViewModel
     var searched by remember(transaction.id) { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
+    val transferId = transaction.transferId
     Text("Transfer", style = MaterialTheme.typography.titleSmall)
-    if (transaction.transferId != null) {
+    if (transferId != null) {
         Text("Linked as a transfer.", style = MaterialTheme.typography.bodySmall)
-        TextButton(onClick = { viewModel.unlinkTransfer(transaction.transferId, onChanged) }) { Text("Unlink") }
+        TextButton(onClick = { viewModel.unlinkTransfer(transferId, onChanged) }) { Text("Unlink") }
     } else {
         candidate?.let {
             Text(
