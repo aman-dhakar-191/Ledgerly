@@ -19,7 +19,7 @@ enum class ParseClass {
     UNKNOWN,
 }
 
-enum class SenderType { BANK, CARD, OTP, PROMO, SPAM, UNKNOWN }
+enum class SenderType { BANK, CARD, OTP, PROMO, SPAM, NOT_FINANCIAL, UNKNOWN }
 
 enum class ParserTxnType { DEBIT, CREDIT, CARD_SPEND, CARD_PAYMENT, STATEMENT, TRANSFER }
 

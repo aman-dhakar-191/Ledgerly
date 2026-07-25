@@ -40,7 +40,12 @@ class SenderClassificationViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             senderRegistryDao.observeAll().collect { all ->
-                val pending = all.filter { !it.trusted }
+                // Untrusted alone isn't "still pending" - OTP/PROMO/SPAM/NOT_FINANCIAL are all
+                // untrusted too, by design, once classified. UNKNOWN is the one type nothing ever
+                // sets except SmsParsingPipeline's first-sight default, so it's the only reliable
+                // "never actually resolved this" signal (found in live use: every classify button
+                // except BANK/CARD looked like it did nothing, because the row never left this list).
+                val pending = all.filter { !it.trusted && it.type == SenderType.UNKNOWN }
                     .groupBy { it.institution }
                     .map { (institution, rows) ->
                         val senderIds = rows.map { it.senderId }
