@@ -7,6 +7,7 @@ import com.amandhakar.ledgerly.database.entity.Account
 import com.amandhakar.ledgerly.database.entity.AccountType
 import com.amandhakar.ledgerly.database.entity.BalanceAnchor
 import com.amandhakar.ledgerly.database.entity.BalanceAnchorSource
+import com.amandhakar.ledgerly.database.entity.CardStatement
 import com.amandhakar.ledgerly.database.entity.Direction
 import com.amandhakar.ledgerly.database.entity.ParseClass
 import com.amandhakar.ledgerly.database.entity.ParseStatus
@@ -59,6 +60,7 @@ class SmsParsingPipelineTest {
             reconciler,
             ledgerSettingsStore,
             CardPaymentMatcher(db.transactionDao(), db.rawSmsDao(), db.accountDao(), db.transferDao()),
+            db.cardStatementDao(),
         )
     }
 
@@ -276,6 +278,100 @@ class SmsParsingPipelineTest {
         val account = db.accountDao().getById("card-1")!!
         assertThat(account.currentBalance).isEqualTo(0L)
         assertThat(account.balanceAsOf).isEqualTo(0L)
+    }
+
+    @Test
+    fun `both statement formats parse into a card statement without creating a transaction`() = runTest {
+        ledgerSettingsStore.setLedgerStartDate(0L)
+        trustSender("AD-ICICIT-S", "ICICIT")
+        creditCardAccount(last4 = "6001", creditLimit = 5_000_000L)
+        archive(
+            "AD-ICICIT-S",
+            "ICICI Bank Credit Card XX6001 Statement is sent to a***@gmail.com. " +
+                "Total of Rs 10,391.94 or minimum of Rs 520.00 is due by 30-JUL-26.",
+        )
+
+        pipeline.processUnprocessed()
+
+        assertThat(db.rawSmsDao().getById("sms-2000")?.parseStatus).isEqualTo(ParseStatus.PARSED)
+        assertThat(db.transactionDao().getByRawSmsId("sms-2000")).isNull()
+        val statement = db.cardStatementDao().getByRawSmsId("sms-2000")
+        assertThat(statement?.totalDue).isEqualTo(1_039_194L)
+        assertThat(statement?.minimumDue).isEqualTo(52_000L)
+    }
+
+    @Test
+    fun `the 'pay total amount due' statement variant also parses without creating a transaction`() = runTest {
+        ledgerSettingsStore.setLedgerStartDate(0L)
+        trustSender("AD-ICICIT-S", "ICICIT")
+        creditCardAccount(last4 = "5001", creditLimit = 5_000_000L)
+        archive(
+            "AD-ICICIT-S",
+            "Pay Total Amount Due of Rs 6,941.21 or Minimum Amount Due of Rs 2,170.00 " +
+                "by 23-Jul-26 towards ICICI Bank Credit Card XX5001.",
+        )
+
+        pipeline.processUnprocessed()
+
+        assertThat(db.transactionDao().getByRawSmsId("sms-2000")).isNull()
+        val statement = db.cardStatementDao().getByRawSmsId("sms-2000")
+        assertThat(statement?.totalDue).isEqualTo(694_121L)
+        assertThat(statement?.minimumDue).isEqualTo(217_000L)
+    }
+
+    @Test
+    fun `a statement mismatch against transactions since the last statement creates a flagged adjustment`() = runTest {
+        ledgerSettingsStore.setLedgerStartDate(0L)
+        trustSender("AD-ICICIT-S", "ICICIT")
+        creditCardAccount(last4 = "6001", creditLimit = 5_000_000L)
+        db.cardStatementDao().insert(
+            CardStatement(
+                id = "stmt-prev",
+                accountId = "card-1",
+                totalDue = 50_000L, // Rs 500.00
+                minimumDue = 5_000L,
+                dueDate = 1_500L,
+                statementDate = 1_000L,
+                rawSmsId = null,
+                createdAt = 1_000L,
+                updatedAt = 1_000L,
+                deletedAt = null,
+            ),
+        )
+        db.transactionDao().insert(
+            Transaction(
+                id = "spend-1",
+                accountId = "card-1",
+                amount = 10_000L, // Rs 100.00 spend -> expected new total is Rs 600.00
+                direction = Direction.DEBIT,
+                occurredAt = 1_200L,
+                merchantRaw = null,
+                balanceAfter = null,
+                rawSmsId = null,
+                source = TransactionSource.SMS_GENERIC,
+                status = TransactionStatus.CONFIRMED,
+                transferId = null,
+                isInternal = false,
+                notes = null,
+                createdAt = 1_200L,
+                updatedAt = 1_200L,
+                deletedAt = null,
+            ),
+        )
+        // States Rs 650.00 - Rs 50.00 more than transactions alone explain (fees/interest).
+        archive(
+            "AD-ICICIT-S",
+            "ICICI Bank Credit Card XX6001 Statement is sent to a***@gmail.com. " +
+                "Total of Rs 650.00 or minimum of Rs 30.00 is due by 30-AUG-26.",
+        )
+
+        pipeline.processUnprocessed()
+
+        val adjustment = db.transactionDao().observeByStatus(TransactionStatus.PENDING_REVIEW).first()
+            .single { it.source == TransactionSource.ADJUSTMENT }
+        assertThat(adjustment.amount).isEqualTo(5_000L) // Rs 50.00
+        assertThat(adjustment.direction).isEqualTo(Direction.DEBIT)
+        assertThat(adjustment.accountId).isEqualTo("card-1")
     }
 
     @Test

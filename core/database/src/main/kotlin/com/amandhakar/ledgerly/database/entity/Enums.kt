@@ -11,6 +11,7 @@ enum class ParseClass {
     TRANSACTION,
     OTP,
     DECLINED,
+    STATEMENT,
     SI_UPCOMING,
     SI_FAILED,
     AUTOPAY_SCHEDULED,
@@ -27,7 +28,8 @@ enum class AccountType { SAVINGS, CURRENT, CREDIT_CARD, CASH, WALLET, LOAN }
 
 enum class Direction { DEBIT, CREDIT }
 
-enum class TransactionSource { SMS_RULE, SMS_GENERIC, MANUAL, IMPORT }
+/** [ADJUSTMENT] is system-created (Task 2.4's statement reconciliation), never SMS- or user-derived. */
+enum class TransactionSource { SMS_RULE, SMS_GENERIC, MANUAL, IMPORT, ADJUSTMENT }
 
 enum class TransactionStatus { CONFIRMED, PENDING_REVIEW, REJECTED }
 

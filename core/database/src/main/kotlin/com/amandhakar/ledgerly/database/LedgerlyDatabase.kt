@@ -5,6 +5,7 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.amandhakar.ledgerly.database.dao.AccountDao
 import com.amandhakar.ledgerly.database.dao.BalanceAnchorDao
+import com.amandhakar.ledgerly.database.dao.CardStatementDao
 import com.amandhakar.ledgerly.database.dao.GoldenTestDao
 import com.amandhakar.ledgerly.database.dao.ParserRuleDao
 import com.amandhakar.ledgerly.database.dao.PayeeAllowlistDao
@@ -15,6 +16,7 @@ import com.amandhakar.ledgerly.database.dao.TransactionDao
 import com.amandhakar.ledgerly.database.dao.TransferDao
 import com.amandhakar.ledgerly.database.entity.Account
 import com.amandhakar.ledgerly.database.entity.BalanceAnchor
+import com.amandhakar.ledgerly.database.entity.CardStatement
 import com.amandhakar.ledgerly.database.entity.GoldenTest
 import com.amandhakar.ledgerly.database.entity.ParserRule
 import com.amandhakar.ledgerly.database.entity.PayeeAllowlist
@@ -41,8 +43,9 @@ import com.amandhakar.ledgerly.database.entity.Transfer
         BalanceAnchor::class,
         PayeeAllowlist::class,
         Transfer::class,
+        CardStatement::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -57,6 +60,7 @@ abstract class LedgerlyDatabase : RoomDatabase() {
     abstract fun balanceAnchorDao(): BalanceAnchorDao
     abstract fun payeeAllowlistDao(): PayeeAllowlistDao
     abstract fun transferDao(): TransferDao
+    abstract fun cardStatementDao(): CardStatementDao
 
     companion object {
         const val DATABASE_NAME = "ledgerly.db"
@@ -67,6 +71,6 @@ abstract class LedgerlyDatabase : RoomDatabase() {
          * schema version as a plain constant, not the `@Database` annotation on the class it's
          * currently running.
          */
-        const val SCHEMA_VERSION = 6
+        const val SCHEMA_VERSION = 7
     }
 }

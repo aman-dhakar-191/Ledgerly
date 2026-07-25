@@ -136,4 +136,31 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
-val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+/** Task 2.4/docs/corpus-findings.md §6: `card_statement` - a statement's due amounts and date, never a transaction. */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS card_statement (
+                id TEXT NOT NULL PRIMARY KEY,
+                account_id TEXT NOT NULL,
+                total_due INTEGER NOT NULL,
+                minimum_due INTEGER NOT NULL,
+                due_date INTEGER NOT NULL,
+                statement_date INTEGER NOT NULL,
+                raw_sms_id TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                deleted_at INTEGER,
+                FOREIGN KEY(account_id) REFERENCES account(id) ON UPDATE NO ACTION ON DELETE NO ACTION
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_card_statement_account_id_statement_date " +
+                "ON card_statement(account_id, statement_date)",
+        )
+    }
+}
+
+val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
