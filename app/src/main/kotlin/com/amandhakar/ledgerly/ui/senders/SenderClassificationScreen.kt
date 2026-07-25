@@ -80,6 +80,9 @@ private fun InstitutionRow(institution: PendingInstitution, onClassify: (SenderT
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("New institution: ${institution.institution}", style = MaterialTheme.typography.titleMedium)
         Text("Raw senders: ${institution.senderIds.joinToString(", ")}", style = MaterialTheme.typography.bodySmall)
+        institution.sampleMessage?.let {
+            Text(it, style = MaterialTheme.typography.bodyMedium)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             CLASSIFICATIONS.forEach { (type, trusted) ->
                 TextButton(onClick = { onClassify(type, trusted) }) { Text(type.label()) }
