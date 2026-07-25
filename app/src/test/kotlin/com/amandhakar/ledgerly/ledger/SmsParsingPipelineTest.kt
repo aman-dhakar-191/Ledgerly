@@ -149,6 +149,23 @@ class SmsParsingPipelineTest {
         deletedAt = null,
     ).also { db.accountDao().insert(it) }
 
+    private suspend fun creditCardAccount(last4: String, creditLimit: Long?, id: String = "card-1") = Account(
+        id = id,
+        name = "Test Card",
+        type = AccountType.CREDIT_CARD,
+        last4 = last4,
+        currency = "INR",
+        currentBalance = 0,
+        balanceAsOf = 0,
+        creditLimit = creditLimit,
+        statementDay = null,
+        dueDay = null,
+        archived = false,
+        createdAt = 0,
+        updatedAt = 0,
+        deletedAt = null,
+    ).also { db.accountDao().insert(it) }
+
     @Test
     fun `an OTP message is ignored and never becomes a transaction`() = runTest {
         ledgerSettingsStore.setLedgerStartDate(0L)
@@ -223,6 +240,42 @@ class SmsParsingPipelineTest {
 
         assertThat(db.rawSmsDao().getById("sms-2000")?.parseStatus).isEqualTo(ParseStatus.REVIEW)
         assertThat(db.transactionDao().getByRawSmsId("sms-2000")).isNull()
+    }
+
+    @Test
+    fun `a card spend with Avl Limit reanchors outstanding using the account's own credit limit`() = runTest {
+        ledgerSettingsStore.setLedgerStartDate(0L)
+        trustSender("AD-ICICIT-S", "ICICIT")
+        creditCardAccount(last4 = "6001", creditLimit = 5_000_000L)
+        archive(
+            "AD-ICICIT-S",
+            "INR 1,630.00 spent using ICICI Bank Card XX6001 on 04-Jul-26 on BLINKIT. " +
+                "Avl Limit: INR 15,468.00. If not you, call 1800 2662",
+        )
+
+        pipeline.processUnprocessed()
+
+        val account = db.accountDao().getById("card-1")!!
+        // outstanding = 50,000.00 - 15,468.00 = 34,532.00, stored negative per docs/schema.md's liability convention.
+        assertThat(account.currentBalance).isEqualTo(-3_453_200L)
+    }
+
+    @Test
+    fun `a card spend with no credit limit set on the account leaves its balance untouched`() = runTest {
+        ledgerSettingsStore.setLedgerStartDate(0L)
+        trustSender("AD-ICICIT-S", "ICICIT")
+        creditCardAccount(last4 = "6001", creditLimit = null)
+        archive(
+            "AD-ICICIT-S",
+            "INR 1,630.00 spent using ICICI Bank Card XX6001 on 04-Jul-26 on BLINKIT. " +
+                "Avl Limit: INR 15,468.00. If not you, call 1800 2662",
+        )
+
+        pipeline.processUnprocessed()
+
+        val account = db.accountDao().getById("card-1")!!
+        assertThat(account.currentBalance).isEqualTo(0L)
+        assertThat(account.balanceAsOf).isEqualTo(0L)
     }
 
     @Test

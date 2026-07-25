@@ -41,12 +41,13 @@ class GenericExtractorTest {
     }
 
     @Test
-    fun `Avl Limit is never mistaken for the transaction amount`() {
+    fun `Avl Limit is never mistaken for the transaction amount or a balance`() {
         val body = "INR 1,630.00 spent using ICICI Bank Card XX6001 on 04-Jul-26 on BLINKIT. " +
             "Avl Limit: INR 15,468.00. If not you, call 1800 2662"
         val result = GenericExtractor.extract(body, someReceivedAt)
         assertThat(result.amount.value).isEqualTo(163_000L)
         assertThat(result.balanceAfter.value).isNull()
+        assertThat(result.availableLimit.value).isEqualTo(1_546_800L)
     }
 
     @Test

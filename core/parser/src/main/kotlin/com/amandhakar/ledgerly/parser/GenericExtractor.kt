@@ -22,6 +22,10 @@ object GenericExtractor {
         """(?i)(avl\s*bal|avb\s*bal|avbl\s*bal|available\s*balance|updated\s*balance\s*is|""" +
             """updated\s*balance\s*:|\bbal\b)\.?\s*[:.]?\s*(?:rs\.?|inr|₹)?\s*(\d[\d,]*(?:\.\d{1,2})?|\.\d{1,2})"""
     )
+    /** Never a balance (docs/corpus-findings.md §8's CARD_SPEND_LIMIT) - a card's available limit. */
+    private val AVAILABLE_LIMIT_LABEL = Regex(
+        """(?i)avl\s*limit\.?\s*[:.]?\s*(?:rs\.?|inr|₹)?\s*(\d[\d,]*(?:\.\d{1,2})?|\.\d{1,2})"""
+    )
 
     private val DEBIT_VERBS = Regex("(?i)\\b(debited|withdrawn|spent|paid|sent)\\b")
     private val CREDIT_VERBS = Regex("(?i)\\b(credited|received|deposited|refund)\\b")
@@ -57,6 +61,7 @@ object GenericExtractor {
     fun extract(body: String, receivedAt: Long): GenericExtraction {
         val balance = extractBalance(body)
         val amount = extractAmount(body, excluding = balance?.span)
+        val availableLimit = extractAvailableLimit(body)
         return GenericExtraction(
             amount = amount?.let { ExtractedField(it.paise, 1f, it.span) } ?: ExtractedField.empty(),
             currency = amount?.let { ExtractedField(it.currency, 1f, it.span) } ?: ExtractedField.empty(),
@@ -66,6 +71,7 @@ object GenericExtractor {
             merchant = extractMerchant(body),
             occurredAt = extractOccurredAt(body, receivedAt),
             reference = extractReference(body),
+            availableLimit = availableLimit?.let { ExtractedField(it.paise, 1f, it.span) } ?: ExtractedField.empty(),
         )
     }
 
@@ -107,6 +113,13 @@ object GenericExtractor {
 
         val bareMatch = BARE_VERB_AMOUNT.find(body) ?: return null
         val numberGroup = bareMatch.groups[1] ?: return null
+        return toAmountMatch(numberGroup.value, currencyToken = null, range = numberGroup.range)
+    }
+
+    @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this parser
+    private fun extractAvailableLimit(body: String): AmountMatch? {
+        val match = AVAILABLE_LIMIT_LABEL.find(body) ?: return null
+        val numberGroup = match.groups[1] ?: return null
         return toAmountMatch(numberGroup.value, currencyToken = null, range = numberGroup.range)
     }
 
