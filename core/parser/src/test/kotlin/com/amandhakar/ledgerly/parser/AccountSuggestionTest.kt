@@ -51,6 +51,19 @@ class AccountSuggestionTest {
     }
 
     @Test
+    fun `sampleMessage is the newest message's body, not the last one in the list`() {
+        val newest = "ICICI Bank Acct XX924 debited for Rs 500.00 on 09-Jun-26; X credited. UPI:1"
+        val messages = listOf(
+            SourceMessage("ICICIT", newest, receivedAt + 5_000),
+            SourceMessage("ICICIT", "ICICI Bank Acct XX924 debited for Rs 200.00 on 10-Jun-26; Y credited. UPI:2", receivedAt),
+        )
+
+        val suggestions = suggestAccounts(messages)
+
+        assertThat(suggestions.single().sampleMessage).isEqualTo(newest)
+    }
+
+    @Test
     fun `a message with no extractable account number produces no suggestion`() {
         val messages = listOf(
             SourceMessage("JUSPAY", "Your Apay Wallet balance is debited for INR 140.00. Reference Number is 600789415458", receivedAt),
