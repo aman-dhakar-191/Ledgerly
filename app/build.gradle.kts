@@ -5,7 +5,7 @@
 // (never the version-name string), so a static literal here would mean no release could ever be
 // detected as newer than the one before it. CI passes -PversionCode=<run number> for release
 // builds (a real, monotonically increasing value); this default only applies to local builds.
-val appVersionName = "0.1.0"
+val appVersionName = "0.1.1"
 val appVersionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
 
 plugins {
