@@ -12,6 +12,7 @@ import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.SenderRegistryDao
 import com.amandhakar.ledgerly.database.dao.TransactionAuditDao
 import com.amandhakar.ledgerly.database.dao.TransactionDao
+import com.amandhakar.ledgerly.database.dao.TransferDao
 import com.amandhakar.ledgerly.database.entity.Account
 import com.amandhakar.ledgerly.database.entity.BalanceAnchor
 import com.amandhakar.ledgerly.database.entity.GoldenTest
@@ -21,6 +22,7 @@ import com.amandhakar.ledgerly.database.entity.RawSms
 import com.amandhakar.ledgerly.database.entity.SenderRegistry
 import com.amandhakar.ledgerly.database.entity.Transaction
 import com.amandhakar.ledgerly.database.entity.TransactionAudit
+import com.amandhakar.ledgerly.database.entity.Transfer
 
 /**
  * Room database name is fixed as `ledgerly.db` (CONTEXT.md) and must not change once encrypted
@@ -38,8 +40,9 @@ import com.amandhakar.ledgerly.database.entity.TransactionAudit
         TransactionAudit::class,
         BalanceAnchor::class,
         PayeeAllowlist::class,
+        Transfer::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -53,6 +56,7 @@ abstract class LedgerlyDatabase : RoomDatabase() {
     abstract fun transactionAuditDao(): TransactionAuditDao
     abstract fun balanceAnchorDao(): BalanceAnchorDao
     abstract fun payeeAllowlistDao(): PayeeAllowlistDao
+    abstract fun transferDao(): TransferDao
 
     companion object {
         const val DATABASE_NAME = "ledgerly.db"
@@ -63,6 +67,6 @@ abstract class LedgerlyDatabase : RoomDatabase() {
          * schema version as a plain constant, not the `@Database` annotation on the class it's
          * currently running.
          */
-        const val SCHEMA_VERSION = 5
+        const val SCHEMA_VERSION = 6
     }
 }

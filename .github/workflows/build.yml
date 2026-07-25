@@ -38,6 +38,13 @@ jobs:
       - name: Run unit tests
         run: ./gradlew test --stacktrace
 
+      # TEMP: prints the freshly KSP-exported v6 schema so it can be extracted from the job log and
+      # committed for real (no network path to download artifact zips in this sandbox). Remove once
+      # core/database/schemas/.../6.json is committed.
+      - name: Print v6 schema export
+        if: always()
+        run: cat core/database/schemas/com.amandhakar.ledgerly.database.LedgerlyDatabase/6.json || true
+
       - name: Upload Room schema export
         uses: actions/upload-artifact@v4
         with:
