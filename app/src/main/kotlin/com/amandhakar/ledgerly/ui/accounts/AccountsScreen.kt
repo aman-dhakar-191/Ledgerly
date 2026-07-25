@@ -104,12 +104,12 @@ private fun AccountRow(account: Account) {
 
 @Composable
 private fun SuggestionRow(suggestion: AccountSuggestion, onAdd: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Text("${suggestion.institution} ···· ${suggestion.last4} (${suggestion.messageCount} messages)")
-        TextButton(onClick = onAdd) { Text("Add") }
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("${suggestion.institution} ···· ${suggestion.last4} (${suggestion.messageCount} messages)")
+            TextButton(onClick = onAdd) { Text("Add") }
+        }
+        Text(suggestion.sampleMessage, style = MaterialTheme.typography.bodySmall)
     }
 }
 

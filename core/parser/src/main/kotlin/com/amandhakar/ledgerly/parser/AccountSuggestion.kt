@@ -13,29 +13,35 @@ data class SourceMessage(val institution: String, val body: String, val received
  * One (institution, last4) combination seen in the archive, with how often and how recently — the
  * caller uses these to rank and pre-fill the "add account" flow. This doesn't itself pick an
  * account type; last4 alone can't distinguish a savings account from a credit card sharing the
- * same trailing digits, so the user still confirms that.
+ * same trailing digits, so the user still confirms that. [sampleMessage] is the newest matching
+ * body — "ICICIT ....924" alone doesn't tell the user which real-world account that is.
  */
 data class AccountSuggestion(
     val institution: String,
     val last4: String,
     val messageCount: Int,
     val lastSeenAt: Long,
+    val sampleMessage: String,
 )
+
+private data class SuggestionCandidate(val institution: String, val last4: String, val receivedAt: Long, val body: String)
 
 fun suggestAccounts(messages: List<SourceMessage>): List<AccountSuggestion> =
     messages
         .mapNotNull { message ->
             val last4 = GenericExtractor.extract(message.body, message.receivedAt).accountLast4.value
                 ?: return@mapNotNull null
-            Triple(message.institution, last4, message.receivedAt)
+            SuggestionCandidate(message.institution, last4, message.receivedAt, message.body)
         }
-        .groupBy { (institution, last4, _) -> institution to last4 }
+        .groupBy { it.institution to it.last4 }
         .map { (key, group) ->
+            val newest = group.maxBy { it.receivedAt }
             AccountSuggestion(
                 institution = key.first,
                 last4 = key.second,
                 messageCount = group.size,
-                lastSeenAt = group.maxOf { it.third },
+                lastSeenAt = newest.receivedAt,
+                sampleMessage = newest.body,
             )
         }
         .sortedWith(compareByDescending<AccountSuggestion> { it.messageCount }.thenByDescending { it.lastSeenAt })
