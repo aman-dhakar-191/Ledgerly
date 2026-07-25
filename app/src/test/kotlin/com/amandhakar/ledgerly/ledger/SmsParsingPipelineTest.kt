@@ -58,6 +58,7 @@ class SmsParsingPipelineTest {
             db.payeeAllowlistDao(),
             reconciler,
             ledgerSettingsStore,
+            CardPaymentMatcher(db.transactionDao(), db.rawSmsDao(), db.accountDao(), db.transferDao()),
         )
     }
 
