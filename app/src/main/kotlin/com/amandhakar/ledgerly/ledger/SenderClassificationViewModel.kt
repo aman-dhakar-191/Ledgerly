@@ -2,6 +2,7 @@ package com.amandhakar.ledgerly.ledger
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.SenderRegistryDao
 import com.amandhakar.ledgerly.database.entity.SenderType
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -13,8 +14,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** One row per institution, not per raw sender ID — docs/corpus-findings.md §1's 13+ raw senders
- * for one ICICI institution must not become 13+ separate classification prompts. */
-data class PendingInstitution(val institution: String, val senderIds: List<String>)
+ * for one ICICI institution must not become 13+ separate classification prompts. [sampleMessage] is
+ * the most recent raw body from any of [senderIds] — the sender ID alone ("FNCEGR") often isn't
+ * enough to tell what an institution even is. */
+data class PendingInstitution(val institution: String, val senderIds: List<String>, val sampleMessage: String?)
 
 data class SenderClassificationUiState(val pendingInstitutions: List<PendingInstitution> = emptyList())
 
@@ -27,6 +30,7 @@ data class SenderClassificationUiState(val pendingInstitutions: List<PendingInst
 @HiltViewModel
 class SenderClassificationViewModel @Inject constructor(
     private val senderRegistryDao: SenderRegistryDao,
+    private val rawSmsDao: RawSmsDao,
     private val smsParsingPipeline: SmsParsingPipeline,
 ) : ViewModel() {
 
@@ -38,7 +42,10 @@ class SenderClassificationViewModel @Inject constructor(
             senderRegistryDao.observeAll().collect { all ->
                 val pending = all.filter { !it.trusted }
                     .groupBy { it.institution }
-                    .map { (institution, rows) -> PendingInstitution(institution, rows.map { it.senderId }) }
+                    .map { (institution, rows) ->
+                        val senderIds = rows.map { it.senderId }
+                        PendingInstitution(institution, senderIds, rawSmsDao.getMostRecentBySenders(senderIds)?.body)
+                    }
                 _uiState.value = SenderClassificationUiState(pendingInstitutions = pending)
             }
         }

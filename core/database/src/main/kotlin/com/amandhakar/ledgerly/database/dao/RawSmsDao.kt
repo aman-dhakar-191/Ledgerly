@@ -28,6 +28,10 @@ interface RawSmsDao {
     @Query("SELECT * FROM raw_sms WHERE dedupe_hash = :dedupeHash AND deleted_at IS NULL")
     suspend fun getByDedupeHash(dedupeHash: String): RawSms?
 
+    /** A sample body for the sender-classification screen (Task 1.4) - the sender ID alone doesn't tell the user what the sender is. */
+    @Query("SELECT * FROM raw_sms WHERE sender IN (:senders) AND deleted_at IS NULL ORDER BY received_at DESC LIMIT 1")
+    suspend fun getMostRecentBySenders(senders: List<String>): RawSms?
+
     @Query("SELECT * FROM raw_sms WHERE parse_status = :status AND deleted_at IS NULL")
     fun observeByStatus(status: ParseStatus): Flow<List<RawSms>>
 
