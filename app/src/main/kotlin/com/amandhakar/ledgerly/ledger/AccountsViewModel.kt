@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.amandhakar.ledgerly.database.dao.AccountDao
 import com.amandhakar.ledgerly.database.dao.BalanceAnchorDao
+import com.amandhakar.ledgerly.database.dao.SenderRegistryDao
 import com.amandhakar.ledgerly.database.entity.Account
 import com.amandhakar.ledgerly.database.entity.AccountType
 import com.amandhakar.ledgerly.database.entity.BalanceAnchor
@@ -29,6 +30,7 @@ class AccountsViewModel @Inject constructor(
     private val accountDao: AccountDao,
     private val balanceAnchorDao: BalanceAnchorDao,
     private val accountSuggestor: AccountSuggestor,
+    private val senderRegistryDao: SenderRegistryDao,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountsUiState())
@@ -59,6 +61,10 @@ class AccountsViewModel @Inject constructor(
      * [openingAsOf] become both the account's first anchor and its denormalised
      * `current_balance`/`balance_as_of` cache (docs/schema.md) — there are no transactions yet to
      * have moved it since.
+     *
+     * Task 2.5: [institution] links every already-seen sender for a WALLET account, which carries
+     * no `last4` for [SmsParsingPipeline.resolveAccount]'s usual match — the sender's own default
+     * account (docs/schema.md) is the only way a wallet message can ever resolve to an account.
      */
     @Suppress("LongParameterList") // one field per Account column the add-account form actually fills in
     fun createAccount(
@@ -69,6 +75,7 @@ class AccountsViewModel @Inject constructor(
         openingBalance: Paise,
         openingAsOf: Long,
         creditLimit: Paise?,
+        institution: String? = null,
     ) {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
@@ -104,6 +111,7 @@ class AccountsViewModel @Inject constructor(
                     deletedAt = null,
                 ),
             )
+            if (institution != null) linkSendersToAccount(senderRegistryDao, institution, accountId, now)
         }
     }
 }

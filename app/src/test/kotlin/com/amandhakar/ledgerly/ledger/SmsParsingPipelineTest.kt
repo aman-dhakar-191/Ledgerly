@@ -168,6 +168,23 @@ class SmsParsingPipelineTest {
         deletedAt = null,
     ).also { db.accountDao().insert(it) }
 
+    private suspend fun walletAccount(id: String = "wallet-1") = Account(
+        id = id,
+        name = "Test Wallet",
+        type = AccountType.WALLET,
+        last4 = null,
+        currency = "INR",
+        currentBalance = 0,
+        balanceAsOf = 0,
+        creditLimit = null,
+        statementDay = null,
+        dueDay = null,
+        archived = false,
+        createdAt = 0,
+        updatedAt = 0,
+        deletedAt = null,
+    ).also { db.accountDao().insert(it) }
+
     @Test
     fun `an OTP message is ignored and never becomes a transaction`() = runTest {
         ledgerSettingsStore.setLedgerStartDate(0L)
@@ -372,6 +389,76 @@ class SmsParsingPipelineTest {
         assertThat(adjustment.amount).isEqualTo(5_000L) // Rs 50.00
         assertThat(adjustment.direction).isEqualTo(Direction.DEBIT)
         assertThat(adjustment.accountId).isEqualTo("card-1")
+    }
+
+    @Test
+    fun `a bank debit funding an Amazon Pay wallet top-up is marked internal, not an expense`() = runTest {
+        ledgerSettingsStore.setLedgerStartDate(0L)
+        trustSender("AD-ICICIT-S", "ICICIT")
+        account(last4 = "924")
+        archive("AD-ICICIT-S", "ICICI Bank Acct XX924 debited for Rs 500.00 on 02-Jun-25; Amazon Pay Bala credited. UPI:123")
+
+        pipeline.processUnprocessed()
+
+        val txn = db.transactionDao().getByRawSmsId("sms-2000")
+        assertThat(txn?.merchantRaw).isEqualTo("Amazon Pay Bala")
+        assertThat(txn?.isInternal).isTrue()
+    }
+
+    @Test
+    fun `a wallet debit resolved via the sender's linked account records as a normal expense`() = runTest {
+        ledgerSettingsStore.setLedgerStartDate(0L)
+        val walletId = "wallet-1"
+        walletAccount(id = walletId)
+        trustSender("JX-JUSPAY-S", "JUSPAY", accountId = walletId)
+        archive("JX-JUSPAY-S", "Your Apay Wallet balance is debited for INR 140.00. Reference Number is 600789415458.")
+
+        pipeline.processUnprocessed()
+
+        // No funding transaction exists at all in this test - partial history is normal (Task 2.5).
+        val txn = db.transactionDao().getByRawSmsId("sms-2000")
+        assertThat(txn?.accountId).isEqualTo(walletId)
+        assertThat(txn?.amount).isEqualTo(14_000L)
+        assertThat(txn?.direction).isEqualTo(Direction.DEBIT)
+        assertThat(txn?.isInternal).isFalse()
+    }
+
+    @Test
+    fun `a rule-matched wallet payment with a balance reconciles just like a bank balance`() = runTest {
+        ledgerSettingsStore.setLedgerStartDate(0L)
+        val walletId = "wallet-1"
+        walletAccount(id = walletId)
+        trustSender("JX-JUSPAY-S", "JUSPAY", accountId = walletId)
+        db.balanceAnchorDao().insert(
+            BalanceAnchor(
+                id = "wallet-anchor",
+                accountId = walletId,
+                balance = 38_198L, // Rs 381.98
+                asOf = 0L,
+                source = BalanceAnchorSource.OPENING,
+                note = null,
+                createdAt = 0,
+                updatedAt = 0,
+                deletedAt = null,
+            ),
+        )
+        val rule = buildRule(
+            "JUSPAY",
+            "Payment of Rs 100.00 using Apay Balance successful at merchant. Updated Balance is Rs 300.00 - SMS by Juspay",
+        )
+        db.parserRuleDao().insert(rule)
+        archive(
+            "JX-JUSPAY-S",
+            "Payment of Rs 114.00 using Apay Balance successful at merchant. Updated Balance is Rs 267.98 - SMS by Juspay",
+            receivedAt = 5_000L,
+        )
+
+        pipeline.processUnprocessed()
+
+        val txn = db.transactionDao().getByRawSmsId("sms-5000")
+        assertThat(txn?.status).isEqualTo(TransactionStatus.CONFIRMED)
+        assertThat(txn?.balanceAfter).isEqualTo(26_798L)
+        assertThat(db.accountDao().getById(walletId)?.currentBalance).isEqualTo(26_798L)
     }
 
     @Test

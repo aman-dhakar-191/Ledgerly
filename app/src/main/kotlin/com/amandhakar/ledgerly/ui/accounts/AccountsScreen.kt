@@ -55,8 +55,17 @@ fun AccountsScreen(onBack: () -> Unit, viewModel: AccountsViewModel = hiltViewMo
         if (showAddForm) {
             AddAccountForm(
                 prefill = prefill,
-                onSubmit = { name, type, last4, currency, opening, creditLimit ->
-                    viewModel.createAccount(name, type, last4, currency, opening, System.currentTimeMillis(), creditLimit)
+                onSubmit = { name, type, last4, currency, opening, creditLimit, institution ->
+                    viewModel.createAccount(
+                        name,
+                        type,
+                        last4,
+                        currency,
+                        opening,
+                        System.currentTimeMillis(),
+                        creditLimit,
+                        institution,
+                    )
                     showAddForm = false
                     prefill = null
                 },
@@ -116,7 +125,15 @@ private fun SuggestionRow(suggestion: AccountSuggestion, onAdd: () -> Unit) {
 @Composable
 private fun AddAccountForm(
     prefill: AccountSuggestion?,
-    onSubmit: (name: String, type: AccountType, last4: String?, currency: String, opening: Paise, creditLimit: Paise?) -> Unit,
+    onSubmit: (
+        name: String,
+        type: AccountType,
+        last4: String?,
+        currency: String,
+        opening: Paise,
+        creditLimit: Paise?,
+        institution: String?,
+    ) -> Unit,
     onCancel: () -> Unit,
 ) {
     var name by remember { mutableStateOf(prefill?.let { "${it.institution} ···· ${it.last4}" }.orEmpty()) }
@@ -125,6 +142,7 @@ private fun AddAccountForm(
     var currency by remember { mutableStateOf("INR") }
     var openingBalanceText by remember { mutableStateOf("") }
     var creditLimitText by remember { mutableStateOf("") }
+    var institutionText by remember { mutableStateOf("") }
 
     val opening = Paise.fromRupeeString(openingBalanceText)
     val creditLimit = if (type == AccountType.CREDIT_CARD) Paise.fromRupeeString(creditLimitText) else null
@@ -161,10 +179,20 @@ private fun AddAccountForm(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
+        if (type == AccountType.WALLET) {
+            OutlinedTextField(
+                value = institutionText,
+                onValueChange = { institutionText = it },
+                label = { Text("Institution (e.g. JUSPAY, ZOMATO)") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
-                onClick = { onSubmit(name, type, last4.ifBlank { null }, currency, opening!!, creditLimit) },
+                onClick = {
+                    onSubmit(name, type, last4.ifBlank { null }, currency, opening!!, creditLimit, institutionText.ifBlank { null })
+                },
                 enabled = canSubmit,
             ) { Text("Save") }
             TextButton(onClick = onCancel) { Text("Cancel") }
