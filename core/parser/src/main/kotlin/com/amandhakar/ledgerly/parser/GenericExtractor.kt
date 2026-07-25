@@ -18,6 +18,8 @@ object GenericExtractor {
         """(?i)(?:debited|credited)\s+(?:by|for|with)?\s*(\d[\d,]*(?:\.\d{1,2})?|\.\d{1,2})"""
     )
     private val LIMIT_GUARD = Regex("(?i)limit")
+    /** ICICI's "To dispute call ... or SMS BLOCK ### to ##########" disclaimer - never a merchant. */
+    private val DISPUTE_FOOTER = Regex("(?i)to dispute call\\b.*")
     private val BALANCE_LABEL = Regex(
         """(?i)(avl\s*bal|avb\s*bal|avbl\s*bal|available\s*balance|updated\s*balance\s*is|""" +
             """updated\s*balance\s*:|\bbal\b)\.?\s*[:.]?\s*(?:rs\.?|inr|₹)?\s*(\d[\d,]*(?:\.\d{1,2})?|\.\d{1,2})"""
@@ -29,6 +31,12 @@ object GenericExtractor {
 
     private val DEBIT_VERBS = Regex("(?i)\\b(debited|withdrawn|spent|paid|sent)\\b")
     private val CREDIT_VERBS = Regex("(?i)\\b(credited|received|deposited|refund)\\b")
+    /**
+     * docs/corpus-findings.md §10's wallet payment format ("Payment of Rs X using Apay Balance
+     * successful ...") carries none of [DEBIT_VERBS]'s words - only checked when neither list
+     * matches, so a "successful" appearing alongside a real credit/refund verb never overrides it.
+     */
+    private val PAYMENT_SUCCESSFUL = Regex("(?i)payment of.*?\\bsuccessful\\b")
 
     private val ACCOUNT_ANCHOR = Regex(
         """(?i)(?:a/c|acct|acc|account|card)s?\.?\s*(?:no\.?\s*)?([Xx*0-9]{3,})"""
@@ -134,7 +142,9 @@ object GenericExtractor {
         val winner = listOfNotNull(
             debit?.let { it to Direction.DEBIT },
             credit?.let { it to Direction.CREDIT },
-        ).minByOrNull { it.first.range.first } ?: return ExtractedField.empty()
+        ).minByOrNull { it.first.range.first }
+            ?: PAYMENT_SUCCESSFUL.find(body)?.let { it to Direction.DEBIT }
+            ?: return ExtractedField.empty()
         return ExtractedField(winner.second, 1f, winner.first.range)
     }
 
@@ -148,12 +158,18 @@ object GenericExtractor {
     }
 
     private fun extractMerchant(body: String): ExtractedField<String> {
-        val found = MERCHANT_ANCHORS.firstNotNullOfOrNull { anchor -> matchMerchant(body, anchor) }
+        // ICICI's "...Avl Bal Rs. X.To dispute call ... or SMS BLOCK ### to ##########" footer runs
+        // on with no space after the period, so it reads as one sentence - the "\bto\s+" anchor
+        // below would otherwise capture this disclaimer whole as a "merchant".
+        val footerStart = DISPUTE_FOOTER.find(body)?.range?.first
+        val found = MERCHANT_ANCHORS.firstNotNullOfOrNull { anchor -> matchMerchant(body, anchor, footerStart) }
         return found ?: ExtractedField.empty()
     }
 
-    private fun matchMerchant(body: String, anchor: Regex): ExtractedField<String>? {
+    @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this parser
+    private fun matchMerchant(body: String, anchor: Regex, footerStart: Int?): ExtractedField<String>? {
         val group = anchor.find(body)?.groups?.get(1) ?: return null
+        if (footerStart != null && group.range.first >= footerStart) return null
         val cleaned = group.value.trim()
         return cleaned.takeIf { it.isNotEmpty() }?.let { ExtractedField(it, 0.6f, group.range) }
     }

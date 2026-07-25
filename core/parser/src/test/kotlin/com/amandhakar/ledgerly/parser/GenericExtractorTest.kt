@@ -51,6 +51,43 @@ class GenericExtractorTest {
     }
 
     @Test
+    fun `the dispute-call disclaimer footer is never mistaken for a merchant`() {
+        val body = "ICICI Bank Acc XX924 debited Rs. 2,170.00 on 23-Jul-26 InfoBIL*INFT*FGR6.Avl Bal Rs. 8,611.98." +
+            "To dispute call 18002662 or SMS BLOCK 924 to 9215676766"
+        val result = GenericExtractor.extract(body, someReceivedAt)
+        assertThat(result.amount.value).isEqualTo(217_000L)
+        assertThat(result.balanceAfter.value).isEqualTo(861_198L)
+        assertThat(result.merchant.value).isNull()
+    }
+
+    @Test
+    fun `a wallet payment with no debit verb is still recognised as a debit`() {
+        val body = "Payment of Rs 114.00 using Apay Balance successful at merchant. " +
+            "Updated Balance is Rs 267.98 - SMS by Juspay"
+        val result = GenericExtractor.extract(body, someReceivedAt)
+        assertThat(result.amount.value).isEqualTo(11_400L)
+        assertThat(result.direction.value).isEqualTo(Direction.DEBIT)
+        assertThat(result.balanceAfter.value).isEqualTo(26_798L)
+    }
+
+    @Test
+    fun `the Zomato wallet payment format also parses as a debit with a balance`() {
+        val body = "Payment of Rs. 14.41 from Zomato Money Balance is successful. " +
+            "Updated balance: Rs. 0.00. Contact zomatomoneysupport@zomato.com for queries. -ZOMATO"
+        val result = GenericExtractor.extract(body, someReceivedAt)
+        assertThat(result.amount.value).isEqualTo(1_441L)
+        assertThat(result.direction.value).isEqualTo(Direction.DEBIT)
+        assertThat(result.balanceAfter.value).isEqualTo(0L)
+    }
+
+    @Test
+    fun `an explicit credit verb still wins even when the body also says 'payment of X successful'`() {
+        val body = "Payment of Rs 500.00 refund is successful; amount credited to your account."
+        val result = GenericExtractor.extract(body, someReceivedAt)
+        assertThat(result.direction.value).isEqualTo(Direction.CREDIT)
+    }
+
+    @Test
     fun `missing date falls back to receivedAt`() {
         val body = "Payment of Rs 114.00 using Apay Balance successful at merchant. " +
             "Updated Balance is Rs 267.98 - SMS by Juspay"

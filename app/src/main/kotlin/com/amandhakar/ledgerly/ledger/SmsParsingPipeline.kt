@@ -32,6 +32,7 @@ import com.amandhakar.ledgerly.parser.StatementExtractor
 import com.amandhakar.ledgerly.parser.capturedFields
 import com.amandhakar.ledgerly.parser.classify
 import com.amandhakar.ledgerly.parser.isPersonalNumber
+import com.amandhakar.ledgerly.parser.isWalletFundingMerchant
 import com.amandhakar.ledgerly.parser.matchWithTimeout
 import com.amandhakar.ledgerly.parser.normalizeSender
 import com.amandhakar.ledgerly.parser.outstandingFromAvailableLimit
@@ -325,6 +326,15 @@ class SmsParsingPipeline @Inject constructor(
         return sender.accountId?.let { accountDao.getById(it) }
     }
 
+    /**
+     * Task 2.5/docs/corpus-findings.md §10: a bank debit funding an Amazon Pay wallet top-up is
+     * visible only from the bank side - a one-sided transfer, same treatment as an already-confirmed
+     * [com.amandhakar.ledgerly.database.entity.PayeeAllowlist] payee, just hardcoded rather than
+     * user-confirmed since the merchant string is a specific, known brand.
+     */
+    private suspend fun isInternalTransfer(merchant: String?): Boolean =
+        isWalletFundingMerchant(merchant) || isAllowlistedPayee(payeeAllowlistDao, merchant)
+
     private suspend fun writeGenericTransaction(
         sms: RawSms,
         account: Account,
@@ -346,7 +356,7 @@ class SmsParsingPipeline @Inject constructor(
             source = TransactionSource.SMS_GENERIC,
             status = TransactionStatus.PENDING_REVIEW,
             transferId = null,
-            isInternal = isAllowlistedPayee(payeeAllowlistDao, extraction.merchant.value),
+            isInternal = isInternalTransfer(extraction.merchant.value),
             notes = null,
             createdAt = now,
             updatedAt = now,
@@ -370,7 +380,7 @@ class SmsParsingPipeline @Inject constructor(
         status: TransactionStatus,
     ): Transaction {
         val now = System.currentTimeMillis()
-        val isInternal = isAllowlistedPayee(payeeAllowlistDao, merchant)
+        val isInternal = isInternalTransfer(merchant)
         if (existing != null) {
             val updated = existing.copy(
                 accountId = account.id,
