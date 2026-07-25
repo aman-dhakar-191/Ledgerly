@@ -59,6 +59,7 @@ class SmsParsingPipeline @Inject constructor(
     private val payeeAllowlistDao: PayeeAllowlistDao,
     private val transactionReconciler: TransactionReconciler,
     private val ledgerSettingsStore: LedgerSettingsStore,
+    private val cardPaymentMatcher: CardPaymentMatcher,
 ) {
     suspend fun processUnprocessed() {
         rawSmsDao.getByStatus(ParseStatus.UNPROCESSED).forEach { processOne(it) }
@@ -147,7 +148,8 @@ class SmsParsingPipeline @Inject constructor(
             return
         }
 
-        writeGenericTransaction(sms, account, extraction, amount, direction.toEntityDirection())
+        val transaction = writeGenericTransaction(sms, account, extraction, amount, direction.toEntityDirection())
+        if (transaction != null) cardPaymentMatcher.tryMatch(transaction)
         markTerminal(sms, institution, parseClass, ParseStatus.REVIEW)
     }
 
@@ -188,10 +190,12 @@ class SmsParsingPipeline @Inject constructor(
         val reconciliation = balanceAfter?.let { transactionReconciler.reconcile(account.id, occurredAt, amount, direction, it) }
         val status = if (reconciliation is ReconciliationResult.Mismatch) TransactionStatus.PENDING_REVIEW else TransactionStatus.CONFIRMED
 
-        writeRuleTransaction(sms, existing, account, amount, direction.toEntityDirection(), merchant, occurredAt, balanceAfter, status)
+        val transaction =
+            writeRuleTransaction(sms, existing, account, amount, direction.toEntityDirection(), merchant, occurredAt, balanceAfter, status)
         if (reconciliation is ReconciliationResult.Confirmed) {
             reanchorAccount(accountDao, balanceAnchorDao, account, reconciliation.newBalance, occurredAt)
         }
+        cardPaymentMatcher.tryMatch(transaction)
 
         val terminalStatus = if (status == TransactionStatus.CONFIRMED) ParseStatus.PARSED else ParseStatus.REVIEW
         markTerminal(sms, institution, ParseClass.TRANSACTION, terminalStatus, rule.id)
@@ -232,29 +236,29 @@ class SmsParsingPipeline @Inject constructor(
         extraction: GenericExtraction,
         amount: Long,
         direction: EntityDirection,
-    ) {
-        if (transactionDao.getByRawSmsId(sms.id) != null) return
+    ): Transaction? {
+        if (transactionDao.getByRawSmsId(sms.id) != null) return null
         val now = System.currentTimeMillis()
-        transactionDao.insert(
-            Transaction(
-                id = UUID.randomUUID().toString(),
-                accountId = account.id,
-                amount = amount,
-                direction = direction,
-                occurredAt = extraction.occurredAt.value ?: sms.receivedAt,
-                merchantRaw = extraction.merchant.value,
-                balanceAfter = extraction.balanceAfter.value,
-                rawSmsId = sms.id,
-                source = TransactionSource.SMS_GENERIC,
-                status = TransactionStatus.PENDING_REVIEW,
-                transferId = null,
-                isInternal = isAllowlistedPayee(payeeAllowlistDao, extraction.merchant.value),
-                notes = null,
-                createdAt = now,
-                updatedAt = now,
-                deletedAt = null,
-            ),
+        val transaction = Transaction(
+            id = UUID.randomUUID().toString(),
+            accountId = account.id,
+            amount = amount,
+            direction = direction,
+            occurredAt = extraction.occurredAt.value ?: sms.receivedAt,
+            merchantRaw = extraction.merchant.value,
+            balanceAfter = extraction.balanceAfter.value,
+            rawSmsId = sms.id,
+            source = TransactionSource.SMS_GENERIC,
+            status = TransactionStatus.PENDING_REVIEW,
+            transferId = null,
+            isInternal = isAllowlistedPayee(payeeAllowlistDao, extraction.merchant.value),
+            notes = null,
+            createdAt = now,
+            updatedAt = now,
+            deletedAt = null,
         )
+        transactionDao.insert(transaction)
+        return transaction
     }
 
     /** Inserts a fresh Tier-1 transaction, or updates a Tier-2 suggestion the rule now supersedes. */
@@ -269,46 +273,45 @@ class SmsParsingPipeline @Inject constructor(
         occurredAt: Long,
         balanceAfter: Long?,
         status: TransactionStatus,
-    ) {
+    ): Transaction {
         val now = System.currentTimeMillis()
         val isInternal = isAllowlistedPayee(payeeAllowlistDao, merchant)
         if (existing != null) {
-            transactionDao.update(
-                existing.copy(
-                    accountId = account.id,
-                    amount = amount,
-                    direction = direction,
-                    occurredAt = occurredAt,
-                    merchantRaw = merchant,
-                    balanceAfter = balanceAfter,
-                    source = TransactionSource.SMS_RULE,
-                    status = status,
-                    isInternal = isInternal,
-                    updatedAt = now,
-                ),
-            )
-            return
-        }
-        transactionDao.insert(
-            Transaction(
-                id = UUID.randomUUID().toString(),
+            val updated = existing.copy(
                 accountId = account.id,
                 amount = amount,
                 direction = direction,
                 occurredAt = occurredAt,
                 merchantRaw = merchant,
                 balanceAfter = balanceAfter,
-                rawSmsId = sms.id,
                 source = TransactionSource.SMS_RULE,
                 status = status,
-                transferId = null,
                 isInternal = isInternal,
-                notes = null,
-                createdAt = now,
                 updatedAt = now,
-                deletedAt = null,
-            ),
+            )
+            transactionDao.update(updated)
+            return updated
+        }
+        val created = Transaction(
+            id = UUID.randomUUID().toString(),
+            accountId = account.id,
+            amount = amount,
+            direction = direction,
+            occurredAt = occurredAt,
+            merchantRaw = merchant,
+            balanceAfter = balanceAfter,
+            rawSmsId = sms.id,
+            source = TransactionSource.SMS_RULE,
+            status = status,
+            transferId = null,
+            isInternal = isInternal,
+            notes = null,
+            createdAt = now,
+            updatedAt = now,
+            deletedAt = null,
         )
+        transactionDao.insert(created)
+        return created
     }
 
     private suspend fun markTerminal(

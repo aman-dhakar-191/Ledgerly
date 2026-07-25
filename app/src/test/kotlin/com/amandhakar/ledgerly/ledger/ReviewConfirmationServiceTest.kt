@@ -48,6 +48,7 @@ class ReviewConfirmationServiceTest {
             db.payeeAllowlistDao(),
             reconciler,
             LedgerSettingsStore(ApplicationProvider.getApplicationContext()),
+            CardPaymentMatcher(db.transactionDao(), db.rawSmsDao(), db.accountDao(), db.transferDao()),
         )
         service = ReviewConfirmationService(
             db.transactionDao(),
