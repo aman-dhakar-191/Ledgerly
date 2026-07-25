@@ -94,10 +94,11 @@ jobs:
         id: app_version
         run: |
           VERSION_NAME=$(grep -m1 'val appVersionName' app/build.gradle.kts | sed -E 's/.*"(.*)".*/\1/')
-          VERSION_CODE=$(grep -m1 'val appVersionCode' app/build.gradle.kts | sed -E 's/.*= *([0-9]+).*/\1/')
           SCHEMA_VERSION=$(grep -m1 'const val SCHEMA_VERSION' core/database/src/main/kotlin/com/amandhakar/ledgerly/database/LedgerlyDatabase.kt | sed -E 's/.*= *([0-9]+).*/\1/')
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          # Must match the -PversionCode value the release APK is actually built with (see the
+          # "Build signed release APK" step) - never grepped from source, which is only a fallback.
+          echo "version_code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           echo "schema_version=$SCHEMA_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Rename debug APK
@@ -119,7 +120,9 @@ jobs:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --stacktrace
+        # versionCode must be a real, monotonically increasing value - the updater's whole job is
+        # comparing this integer, and github.run_number never repeats or goes backwards.
+        run: ./gradlew assembleRelease -PversionCode=${{ github.run_number }} --stacktrace
 
       - name: Rename release APK
         if: steps.release_secrets.outputs.present == 'true'
