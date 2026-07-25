@@ -80,6 +80,7 @@ class CardPaymentMatcherTest {
         deletedAt = null,
     ).also { db.rawSmsDao().insert(it) }
 
+    @Suppress("LongParameterList") // one field per typed value the test needs to vary
     private suspend fun transaction(
         id: String,
         accountId: String,

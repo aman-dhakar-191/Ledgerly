@@ -61,6 +61,7 @@ class CardPaymentMatcher @Inject constructor(
             .minByOrNull { abs(it.occurredAt - debit.occurredAt) }
     }
 
+    @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this validation-heavy path
     private suspend fun findBankDebit(credit: Transaction): Transaction? {
         val creditAccount = accountDao.getById(credit.accountId) ?: return null
         if (creditAccount.type != AccountType.CREDIT_CARD) return null
@@ -78,6 +79,7 @@ class CardPaymentMatcher @Inject constructor(
     private suspend fun transactionsOnDay(accountId: String, epochMillis: Long): List<Transaction> =
         transactionDao.observeByAccountAndDateRange(accountId, dayStart(epochMillis), dayEnd(epochMillis)).first()
 
+    @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this validation-heavy path
     private suspend fun isBillPaymentDebit(debit: Transaction): Boolean {
         val rawSmsId = debit.rawSmsId ?: return false
         val body = rawSmsDao.getById(rawSmsId)?.body ?: return false
