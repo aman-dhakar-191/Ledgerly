@@ -108,4 +108,32 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
-val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+/** Task 2.1/docs/schema.md: `transfer` — links two transactions as one movement of the user's own money. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Foreign keys must be declared here to match the Room-generated schema exactly -
+        // MigrationTestHelper.runMigrationsAndValidate() diffs actual PRAGMA foreign_key_list
+        // against the exported schema, not just column names/types.
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS transfer (
+                id TEXT NOT NULL PRIMARY KEY,
+                from_txn_id TEXT NOT NULL,
+                to_txn_id TEXT,
+                kind TEXT NOT NULL,
+                detected_by TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                deleted_at INTEGER,
+                FOREIGN KEY(from_txn_id) REFERENCES transaction_entity(id) ON UPDATE NO ACTION ON DELETE NO ACTION,
+                FOREIGN KEY(to_txn_id) REFERENCES transaction_entity(id) ON UPDATE NO ACTION ON DELETE NO ACTION
+            )
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_transfer_from_txn_id ON transfer(from_txn_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_transfer_to_txn_id ON transfer(to_txn_id)")
+    }
+}
+
+val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)

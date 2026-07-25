@@ -174,4 +174,23 @@ class MigrationTest {
             assertThat(cursor.getString(cursor.getColumnIndexOrThrow("normalized_name"))).isEqualTo("AMAN DHAKAR")
         }
     }
+
+    /** Task 2.1/docs/schema.md: a fresh table, not an alteration - just needs to exist and accept a row. */
+    @Test
+    fun `migrate 5 to 6 creates the transfer table`() {
+        helper.createDatabase(testDbName, 5).apply { close() }
+
+        val migrated = helper.runMigrationsAndValidate(testDbName, 6, true, MIGRATION_5_6)
+
+        migrated.execSQL(
+            """
+            INSERT INTO transfer (id, from_txn_id, to_txn_id, kind, detected_by, confidence, created_at, updated_at, deleted_at)
+            VALUES ('transfer-1', 'txn-1', 'txn-2', 'ACCOUNT_TO_ACCOUNT', 'MANUAL', 1.0, 1700000000000, 1700000000000, NULL)
+            """.trimIndent(),
+        )
+        migrated.query("SELECT * FROM transfer WHERE id = 'transfer-1'").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getString(cursor.getColumnIndexOrThrow("kind"))).isEqualTo("ACCOUNT_TO_ACCOUNT")
+        }
+    }
 }

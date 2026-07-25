@@ -12,6 +12,7 @@ import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.SenderRegistryDao
 import com.amandhakar.ledgerly.database.dao.TransactionAuditDao
 import com.amandhakar.ledgerly.database.dao.TransactionDao
+import com.amandhakar.ledgerly.database.dao.TransferDao
 import com.amandhakar.ledgerly.database.migration.ALL_MIGRATIONS
 import dagger.Module
 import dagger.Provides
@@ -41,4 +42,5 @@ object DatabaseModule {
     @Provides fun provideTransactionAuditDao(db: LedgerlyDatabase): TransactionAuditDao = db.transactionAuditDao()
     @Provides fun provideBalanceAnchorDao(db: LedgerlyDatabase): BalanceAnchorDao = db.balanceAnchorDao()
     @Provides fun providePayeeAllowlistDao(db: LedgerlyDatabase): PayeeAllowlistDao = db.payeeAllowlistDao()
+    @Provides fun provideTransferDao(db: LedgerlyDatabase): TransferDao = db.transferDao()
 }

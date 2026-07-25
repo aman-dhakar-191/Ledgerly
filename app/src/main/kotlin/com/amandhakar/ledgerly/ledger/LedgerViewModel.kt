@@ -11,6 +11,7 @@ import com.amandhakar.ledgerly.database.entity.Transaction
 import com.amandhakar.ledgerly.database.entity.TransactionAudit
 import com.amandhakar.ledgerly.database.entity.TransactionSource
 import com.amandhakar.ledgerly.database.entity.TransactionStatus
+import com.amandhakar.ledgerly.database.entity.TransferKind
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
 import javax.inject.Inject
@@ -33,6 +34,7 @@ class LedgerViewModel @Inject constructor(
     private val transactionDao: TransactionDao,
     private val transactionAuditDao: TransactionAuditDao,
     private val transactionEditor: TransactionEditor,
+    private val transferLinker: TransferLinker,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LedgerUiState())
@@ -96,4 +98,22 @@ class LedgerViewModel @Inject constructor(
 
     fun auditHistory(transactionId: String): Flow<List<TransactionAudit>> =
         transactionAuditDao.observeForTransaction(transactionId)
+
+    /** Task 2.1: a suggestion only — the caller still confirms before [linkTransfer] is called. */
+    suspend fun findTransferCounterpart(transaction: Transaction): Transaction? =
+        transferLinker.findCounterpart(transaction)
+
+    fun linkTransfer(from: Transaction, to: Transaction, kind: TransferKind, onLinked: () -> Unit) {
+        viewModelScope.launch {
+            transferLinker.link(from, to, kind)
+            onLinked()
+        }
+    }
+
+    fun unlinkTransfer(transferId: String, onUnlinked: () -> Unit) {
+        viewModelScope.launch {
+            transferLinker.unlink(transferId)
+            onUnlinked()
+        }
+    }
 }
