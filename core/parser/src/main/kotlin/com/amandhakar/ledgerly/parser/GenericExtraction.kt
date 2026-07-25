@@ -17,4 +17,6 @@ data class GenericExtraction(
     val merchant: ExtractedField<String>,
     val occurredAt: ExtractedField<Long>,
     val reference: ExtractedField<String>,
+    /** `Avl Limit` (docs/corpus-findings.md §8) - a credit card's available limit, never a balance. */
+    val availableLimit: ExtractedField<Long> = ExtractedField.empty(),
 )

@@ -201,6 +201,89 @@ class TransactionReconcilerTest {
         assertThat(result).isEqualTo(ReconciliationResult.Confirmed(49_500L))
     }
 
+    /**
+     * Task 2.3's own test: "spend increases outstanding; payment decreases it." No separate
+     * accounting path exists for this - `Account.current_balance` is already "negative for
+     * liabilities" (docs/schema.md), so this is the exact same signed-sum arithmetic as any other
+     * account, just read with the sign flipped (outstanding = -current_balance).
+     */
+    @Test
+    fun `for a credit card account, a spend increases outstanding and a payment decreases it`() = runTest {
+        val cardAccountId = "card-1"
+        db.accountDao().insert(
+            Account(
+                id = cardAccountId,
+                name = "Test Card",
+                type = AccountType.CREDIT_CARD,
+                last4 = "6001",
+                currency = "INR",
+                currentBalance = 0,
+                balanceAsOf = 0,
+                creditLimit = 5_000_000L,
+                statementDay = null,
+                dueDay = null,
+                archived = false,
+                createdAt = 0,
+                updatedAt = 0,
+                deletedAt = null,
+            ),
+        )
+        db.balanceAnchorDao().insert(
+            BalanceAnchor(
+                id = "card-anchor",
+                accountId = cardAccountId,
+                balance = -50_000L, // 500.00 outstanding, stored negative for the liability
+                asOf = 1_000L,
+                source = BalanceAnchorSource.OPENING,
+                note = null,
+                createdAt = 1_000L,
+                updatedAt = 1_000L,
+                deletedAt = null,
+            ),
+        )
+
+        val afterSpend = reconciler.reconcile(
+            cardAccountId,
+            occurredAt = 1_500L,
+            txnAmount = 10_000L,
+            txnDirection = ParserDirection.DEBIT,
+            statedBalanceAfter = null,
+        )
+        // outstanding: 500.00 -> 600.00
+        assertThat(afterSpend).isEqualTo(ReconciliationResult.NoBalanceStated(-60_000L))
+
+        db.transactionDao().insert(
+            Transaction(
+                id = "spend-1",
+                accountId = cardAccountId,
+                amount = 10_000L,
+                direction = Direction.DEBIT,
+                occurredAt = 1_500L,
+                merchantRaw = null,
+                balanceAfter = null,
+                rawSmsId = null,
+                source = TransactionSource.SMS_GENERIC,
+                status = TransactionStatus.CONFIRMED,
+                transferId = null,
+                isInternal = false,
+                notes = null,
+                createdAt = 1_500L,
+                updatedAt = 1_500L,
+                deletedAt = null,
+            ),
+        )
+
+        val afterPayment = reconciler.reconcile(
+            cardAccountId,
+            occurredAt = 2_000L,
+            txnAmount = 25_000L,
+            txnDirection = ParserDirection.CREDIT,
+            statedBalanceAfter = null,
+        )
+        // outstanding: 600.00 -> 350.00
+        assertThat(afterPayment).isEqualTo(ReconciliationResult.NoBalanceStated(-35_000L))
+    }
+
     @Test
     fun `reconciliation picks the latest anchor at or before the transaction, not an earlier or later one`() = runTest {
         anchor(balance = 1_000L, asOf = 500L, id = "anchor-earliest")

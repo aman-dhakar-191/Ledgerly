@@ -8,6 +8,7 @@ import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.SenderRegistryDao
 import com.amandhakar.ledgerly.database.dao.TransactionDao
 import com.amandhakar.ledgerly.database.entity.Account
+import com.amandhakar.ledgerly.database.entity.AccountType
 import com.amandhakar.ledgerly.database.entity.ParseStatus
 import com.amandhakar.ledgerly.database.entity.ParserRule
 import com.amandhakar.ledgerly.database.entity.ParserTxnType
@@ -29,6 +30,7 @@ import com.amandhakar.ledgerly.parser.classify
 import com.amandhakar.ledgerly.parser.isPersonalNumber
 import com.amandhakar.ledgerly.parser.matchWithTimeout
 import com.amandhakar.ledgerly.parser.normalizeSender
+import com.amandhakar.ledgerly.parser.outstandingFromAvailableLimit
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
@@ -150,6 +152,7 @@ class SmsParsingPipeline @Inject constructor(
 
         val transaction = writeGenericTransaction(sms, account, extraction, amount, direction.toEntityDirection())
         if (transaction != null) cardPaymentMatcher.tryMatch(transaction)
+        maybeReanchorCreditCardOutstanding(account, extraction, extraction.occurredAt.value ?: sms.receivedAt)
         markTerminal(sms, institution, parseClass, ParseStatus.REVIEW)
     }
 
@@ -196,6 +199,7 @@ class SmsParsingPipeline @Inject constructor(
             reanchorAccount(accountDao, balanceAnchorDao, account, reconciliation.newBalance, occurredAt)
         }
         cardPaymentMatcher.tryMatch(transaction)
+        maybeReanchorCreditCardOutstanding(account, extraction, occurredAt)
 
         val terminalStatus = if (status == TransactionStatus.CONFIRMED) ParseStatus.PARSED else ParseStatus.REVIEW
         markTerminal(sms, institution, ParseClass.TRANSACTION, terminalStatus, rule.id)
@@ -312,6 +316,20 @@ class SmsParsingPipeline @Inject constructor(
         )
         transactionDao.insert(created)
         return created
+    }
+
+    /**
+     * Task 2.3: `Avl Limit` (docs/corpus-findings.md §8) reconciles a CREDIT_CARD account's
+     * outstanding balance only via its own `credit_limit` - never the bank-account reconciliation
+     * path, which expects a literal stated balance. Silently a no-op until the user has entered a
+     * credit limit for this card (tasks/phase-2.md: "prompt for it once per card").
+     */
+    private suspend fun maybeReanchorCreditCardOutstanding(account: Account, extraction: GenericExtraction, occurredAt: Long) {
+        if (account.type != AccountType.CREDIT_CARD) return
+        val creditLimit = account.creditLimit ?: return
+        val availableLimit = extraction.availableLimit.value ?: return
+        val outstanding = outstandingFromAvailableLimit(creditLimit, availableLimit)
+        reanchorAccount(accountDao, balanceAnchorDao, account, -outstanding, occurredAt)
     }
 
     private suspend fun markTerminal(
