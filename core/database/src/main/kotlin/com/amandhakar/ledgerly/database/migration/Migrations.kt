@@ -111,6 +111,9 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
 /** Task 2.1/docs/schema.md: `transfer` — links two transactions as one movement of the user's own money. */
 val MIGRATION_5_6 = object : Migration(5, 6) {
     override fun migrate(db: SupportSQLiteDatabase) {
+        // Foreign keys must be declared here to match the Room-generated schema exactly -
+        // MigrationTestHelper.runMigrationsAndValidate() diffs actual PRAGMA foreign_key_list
+        // against the exported schema, not just column names/types.
         db.execSQL(
             """
             CREATE TABLE IF NOT EXISTS transfer (
@@ -122,7 +125,9 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
                 confidence REAL NOT NULL,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
-                deleted_at INTEGER
+                deleted_at INTEGER,
+                FOREIGN KEY(from_txn_id) REFERENCES transaction_entity(id) ON UPDATE NO ACTION ON DELETE NO ACTION,
+                FOREIGN KEY(to_txn_id) REFERENCES transaction_entity(id) ON UPDATE NO ACTION ON DELETE NO ACTION
             )
             """.trimIndent(),
         )
