@@ -1,7 +1,12 @@
-// Read by name (not evaluated) by docs/ci.md's CI workflow via `grep`, to tag release
-// artifacts/GitHub Releases without needing the workflow to invoke Gradle for it.
+// appVersionName is read by name (not evaluated) by docs/ci.md's CI workflow via `grep`, to tag
+// release artifacts/GitHub Releases without needing the workflow to invoke Gradle for it.
+//
+// appVersionCode is NOT read that way - docs/ci.md's updater compares `versionCode` integers
+// (never the version-name string), so a static literal here would mean no release could ever be
+// detected as newer than the one before it. CI passes -PversionCode=<run number> for release
+// builds (a real, monotonically increasing value); this default only applies to local builds.
 val appVersionName = "0.1.0"
-val appVersionCode = 1
+val appVersionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
 
 plugins {
     alias(libs.plugins.android.application)

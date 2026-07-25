@@ -87,9 +87,11 @@ jobs:
         id: app_version
         run: |
           VERSION_NAME=$(grep -m1 'val appVersionName' app/build.gradle.kts | sed -E 's/.*"(.*)".*/\1/')
-          VERSION_CODE=$(grep -m1 'val appVersionCode' app/build.gradle.kts | sed -E 's/.*= *([0-9]+).*/\1/')
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          # Must match the -PversionCode value the release build actually uses below - a value
+          # grepped from a source-code literal can never be the monotonically increasing integer
+          # the updater's whole comparison depends on.
+          echo "version_code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: Rename debug APK
         if: steps.release_secrets.outputs.present != 'true'
@@ -110,7 +112,9 @@ jobs:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: ./gradlew assembleRelease --stacktrace
+        # versionCode must be a real, monotonically increasing value - github.run_number never
+        # repeats or goes backwards, unlike a hand-maintained literal in source.
+        run: ./gradlew assembleRelease -PversionCode=${{ github.run_number }} --stacktrace
 
       - name: Rename release APK
         if: steps.release_secrets.outputs.present == 'true'
@@ -137,8 +141,12 @@ jobs:
             versionCode: ${{ steps.app_version.outputs.version_code }}
 ```
 
-Note `version_code` is extracted and written into the release body. The updater
-compares integers, never version-name strings — see below.
+Note `version_code` is `github.run_number`, not a value read from source — a
+hardcoded literal in `build.gradle.kts` was shipped in every release for a
+while (found in live use, not in review) and meant no release could ever be
+detected as newer than the last: `versionCode <= currentVersionCode` was
+always true. The updater compares integers, never version-name strings — see
+below.
 
 ---
 
