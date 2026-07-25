@@ -473,6 +473,7 @@ class SmsParsingPipeline @Inject constructor(
      * which pairs two messages, this is a one-sided [Transfer] (docs/schema.md's nullable
      * `to_txn_id`) from the moment the bank-side debit is written.
      */
+    @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this pipeline
     private suspend fun maybeLinkBnplSettlement(transaction: Transaction) {
         if (transaction.transferId != null) return
         if (transaction.direction != EntityDirection.DEBIT) return
