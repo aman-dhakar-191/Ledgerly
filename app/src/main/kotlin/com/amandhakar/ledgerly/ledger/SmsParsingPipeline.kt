@@ -324,6 +324,7 @@ class SmsParsingPipeline @Inject constructor(
      * path, which expects a literal stated balance. Silently a no-op until the user has entered a
      * credit limit for this card (tasks/phase-2.md: "prompt for it once per card").
      */
+    @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this validation-heavy path
     private suspend fun maybeReanchorCreditCardOutstanding(account: Account, extraction: GenericExtraction, occurredAt: Long) {
         if (account.type != AccountType.CREDIT_CARD) return
         val creditLimit = account.creditLimit ?: return

@@ -66,11 +66,11 @@ class TransactionReconcilerTest {
         db.close()
     }
 
-    private suspend fun anchor(balance: Long, asOf: Long, id: String = "anchor-$asOf") {
+    private suspend fun anchor(balance: Long, asOf: Long, id: String = "anchor-$asOf", forAccountId: String = accountId) {
         db.balanceAnchorDao().insert(
             BalanceAnchor(
                 id = id,
-                accountId = accountId,
+                accountId = forAccountId,
                 balance = balance,
                 asOf = asOf,
                 source = BalanceAnchorSource.OPENING,
@@ -82,11 +82,18 @@ class TransactionReconcilerTest {
         )
     }
 
-    private suspend fun confirmedTxn(amount: Long, direction: Direction, occurredAt: Long, id: String = "txn-$occurredAt") {
+    @Suppress("LongParameterList") // one field per typed value the test needs to vary
+    private suspend fun confirmedTxn(
+        amount: Long,
+        direction: Direction,
+        occurredAt: Long,
+        id: String = "txn-$occurredAt",
+        forAccountId: String = accountId,
+    ) {
         db.transactionDao().insert(
             Transaction(
                 id = id,
-                accountId = accountId,
+                accountId = forAccountId,
                 amount = amount,
                 direction = direction,
                 occurredAt = occurredAt,
@@ -228,60 +235,20 @@ class TransactionReconcilerTest {
                 deletedAt = null,
             ),
         )
-        db.balanceAnchorDao().insert(
-            BalanceAnchor(
-                id = "card-anchor",
-                accountId = cardAccountId,
-                balance = -50_000L, // 500.00 outstanding, stored negative for the liability
-                asOf = 1_000L,
-                source = BalanceAnchorSource.OPENING,
-                note = null,
-                createdAt = 1_000L,
-                updatedAt = 1_000L,
-                deletedAt = null,
-            ),
-        )
+        // 500.00 outstanding, stored negative for the liability (docs/schema.md).
+        anchor(balance = -50_000L, asOf = 1_000L, id = "card-anchor", forAccountId = cardAccountId)
 
         val afterSpend = reconciler.reconcile(
-            cardAccountId,
-            occurredAt = 1_500L,
-            txnAmount = 10_000L,
-            txnDirection = ParserDirection.DEBIT,
-            statedBalanceAfter = null,
+            cardAccountId, occurredAt = 1_500L, txnAmount = 10_000L, txnDirection = ParserDirection.DEBIT, statedBalanceAfter = null,
         )
-        // outstanding: 500.00 -> 600.00
-        assertThat(afterSpend).isEqualTo(ReconciliationResult.NoBalanceStated(-60_000L))
+        assertThat(afterSpend).isEqualTo(ReconciliationResult.NoBalanceStated(-60_000L)) // outstanding: 500.00 -> 600.00
 
-        db.transactionDao().insert(
-            Transaction(
-                id = "spend-1",
-                accountId = cardAccountId,
-                amount = 10_000L,
-                direction = Direction.DEBIT,
-                occurredAt = 1_500L,
-                merchantRaw = null,
-                balanceAfter = null,
-                rawSmsId = null,
-                source = TransactionSource.SMS_GENERIC,
-                status = TransactionStatus.CONFIRMED,
-                transferId = null,
-                isInternal = false,
-                notes = null,
-                createdAt = 1_500L,
-                updatedAt = 1_500L,
-                deletedAt = null,
-            ),
-        )
+        confirmedTxn(amount = 10_000L, direction = Direction.DEBIT, occurredAt = 1_500L, id = "spend-1", forAccountId = cardAccountId)
 
         val afterPayment = reconciler.reconcile(
-            cardAccountId,
-            occurredAt = 2_000L,
-            txnAmount = 25_000L,
-            txnDirection = ParserDirection.CREDIT,
-            statedBalanceAfter = null,
+            cardAccountId, occurredAt = 2_000L, txnAmount = 25_000L, txnDirection = ParserDirection.CREDIT, statedBalanceAfter = null,
         )
-        // outstanding: 600.00 -> 350.00
-        assertThat(afterPayment).isEqualTo(ReconciliationResult.NoBalanceStated(-35_000L))
+        assertThat(afterPayment).isEqualTo(ReconciliationResult.NoBalanceStated(-35_000L)) // outstanding: 600.00 -> 350.00
     }
 
     @Test
