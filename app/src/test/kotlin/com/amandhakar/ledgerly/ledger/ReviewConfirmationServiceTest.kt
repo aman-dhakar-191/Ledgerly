@@ -50,6 +50,7 @@ class ReviewConfirmationServiceTest {
             LedgerSettingsStore(ApplicationProvider.getApplicationContext()),
             CardPaymentMatcher(db.transactionDao(), db.rawSmsDao(), db.accountDao(), db.transferDao()),
             db.cardStatementDao(),
+            db.transferDao(),
         )
         service = ReviewConfirmationService(
             db.transactionDao(),

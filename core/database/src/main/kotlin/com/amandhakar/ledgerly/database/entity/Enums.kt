@@ -12,6 +12,7 @@ enum class ParseClass {
     OTP,
     DECLINED,
     STATEMENT,
+    CREDIT_LIMIT_CHANGE,
     SI_UPCOMING,
     SI_FAILED,
     AUTOPAY_SCHEDULED,
@@ -24,7 +25,7 @@ enum class SenderType { BANK, CARD, OTP, PROMO, SPAM, NOT_FINANCIAL, UNKNOWN }
 
 enum class ParserTxnType { DEBIT, CREDIT, CARD_SPEND, CARD_PAYMENT, STATEMENT, TRANSFER }
 
-enum class AccountType { SAVINGS, CURRENT, CREDIT_CARD, CASH, WALLET, LOAN }
+enum class AccountType { SAVINGS, CURRENT, CREDIT_CARD, CASH, WALLET, LOAN, BNPL }
 
 enum class Direction { DEBIT, CREDIT }
 

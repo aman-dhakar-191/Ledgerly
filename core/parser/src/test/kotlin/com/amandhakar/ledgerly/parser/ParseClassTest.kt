@@ -71,6 +71,20 @@ class ParseClassTest {
     }
 
     @Test
+    fun `axio's BNPL bill due notice is a statement, not a transaction`() {
+        val body = "Your Pay Later bill of Rs 1698 will be debited on 5th of this month from " +
+            "registered bank a/c. View Bill http://example.com -axio"
+        assertThat(classify(body)).isEqualTo(ParseClass.STATEMENT)
+    }
+
+    @Test
+    fun `axio's BNPL credit limit change is not a transaction`() {
+        val body = "Approved credit for your Pay Later account has been modified to Rs. 30000. " +
+            "Please ensure timely payments on/before the due date for revaluation -axio"
+        assertThat(classify(body)).isEqualTo(ParseClass.CREDIT_LIMIT_CHANGE)
+    }
+
+    @Test
     fun `a collect request is not a debit`() {
         val body = "SMARTWORKS TECH SOLUTIONS PVT has requested money from you on your AMAZON app. " +
             "On approving the request, Rs.140.00 will be debited from your a/c."

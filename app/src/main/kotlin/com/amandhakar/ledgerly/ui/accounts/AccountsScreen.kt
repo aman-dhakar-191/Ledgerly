@@ -145,7 +145,8 @@ private fun AddAccountForm(
     var institutionText by remember { mutableStateOf("") }
 
     val opening = Paise.fromRupeeString(openingBalanceText)
-    val creditLimit = if (type == AccountType.CREDIT_CARD) Paise.fromRupeeString(creditLimitText) else null
+    val creditLimit =
+        if (type == AccountType.CREDIT_CARD || type == AccountType.BNPL) Paise.fromRupeeString(creditLimitText) else null
     val canSubmit = name.isNotBlank() && opening != null
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -171,7 +172,7 @@ private fun AddAccountForm(
             isError = openingBalanceText.isNotEmpty() && opening == null,
             modifier = Modifier.fillMaxWidth(),
         )
-        if (type == AccountType.CREDIT_CARD) {
+        if (type == AccountType.CREDIT_CARD || type == AccountType.BNPL) {
             OutlinedTextField(
                 value = creditLimitText,
                 onValueChange = { creditLimitText = it },
@@ -179,11 +180,11 @@ private fun AddAccountForm(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        if (type == AccountType.WALLET) {
+        if (type == AccountType.WALLET || type == AccountType.BNPL) {
             OutlinedTextField(
                 value = institutionText,
                 onValueChange = { institutionText = it },
-                label = { Text("Institution (e.g. JUSPAY, ZOMATO)") },
+                label = { Text("Institution (e.g. JUSPAY, ZOMATO, axioFS)") },
                 modifier = Modifier.fillMaxWidth(),
             )
         }

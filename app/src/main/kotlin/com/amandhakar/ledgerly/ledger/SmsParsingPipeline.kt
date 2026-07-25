@@ -8,9 +8,11 @@ import com.amandhakar.ledgerly.database.dao.PayeeAllowlistDao
 import com.amandhakar.ledgerly.database.dao.RawSmsDao
 import com.amandhakar.ledgerly.database.dao.SenderRegistryDao
 import com.amandhakar.ledgerly.database.dao.TransactionDao
+import com.amandhakar.ledgerly.database.dao.TransferDao
 import com.amandhakar.ledgerly.database.entity.Account
 import com.amandhakar.ledgerly.database.entity.AccountType
 import com.amandhakar.ledgerly.database.entity.CardStatement
+import com.amandhakar.ledgerly.database.entity.DetectedBy
 import com.amandhakar.ledgerly.database.entity.ParseStatus
 import com.amandhakar.ledgerly.database.entity.ParserRule
 import com.amandhakar.ledgerly.database.entity.ParserTxnType
@@ -20,6 +22,8 @@ import com.amandhakar.ledgerly.database.entity.SenderType
 import com.amandhakar.ledgerly.database.entity.Transaction
 import com.amandhakar.ledgerly.database.entity.TransactionSource
 import com.amandhakar.ledgerly.database.entity.TransactionStatus
+import com.amandhakar.ledgerly.database.entity.Transfer
+import com.amandhakar.ledgerly.database.entity.TransferKind
 import com.amandhakar.ledgerly.model.money.Paise
 import com.amandhakar.ledgerly.parser.GeneratedRule
 import com.amandhakar.ledgerly.parser.GenericExtraction
@@ -31,6 +35,8 @@ import com.amandhakar.ledgerly.parser.StatementAmounts
 import com.amandhakar.ledgerly.parser.StatementExtractor
 import com.amandhakar.ledgerly.parser.capturedFields
 import com.amandhakar.ledgerly.parser.classify
+import com.amandhakar.ledgerly.parser.extractNewCreditLimit
+import com.amandhakar.ledgerly.parser.isBnplSettlementMerchant
 import com.amandhakar.ledgerly.parser.isPersonalNumber
 import com.amandhakar.ledgerly.parser.isWalletFundingMerchant
 import com.amandhakar.ledgerly.parser.matchWithTimeout
@@ -69,6 +75,7 @@ class SmsParsingPipeline @Inject constructor(
     private val ledgerSettingsStore: LedgerSettingsStore,
     private val cardPaymentMatcher: CardPaymentMatcher,
     private val cardStatementDao: CardStatementDao,
+    private val transferDao: TransferDao,
 ) {
     suspend fun processUnprocessed() {
         rawSmsDao.getByStatus(ParseStatus.UNPROCESSED).forEach { processOne(it) }
@@ -115,10 +122,10 @@ class SmsParsingPipeline @Inject constructor(
 
         val parseClass = classify(sms.body)
 
-        // Task 2.4: a statement is never a transaction, but it's still real financial data from a
-        // trusted sender - it goes through the same trust/ledger-start gates as TRANSACTION, just
-        // diverges below them instead of falling into Tier 1/2.
-        if (parseClass != ParseClass.TRANSACTION && parseClass != ParseClass.STATEMENT) {
+        // Task 2.4/2.6: a statement or a BNPL credit-limit-change notice is never a transaction, but
+        // both are still real financial data from a trusted sender - they go through the same
+        // trust/ledger-start gates as TRANSACTION, just diverge below them instead of Tier 1/2.
+        if (parseClass != ParseClass.TRANSACTION && parseClass != ParseClass.STATEMENT && parseClass != ParseClass.CREDIT_LIMIT_CHANGE) {
             markTerminal(sms, institution, parseClass, ParseStatus.IGNORED)
             return
         }
@@ -138,6 +145,11 @@ class SmsParsingPipeline @Inject constructor(
 
         if (parseClass == ParseClass.STATEMENT) {
             processStatement(sms, institution, sender)
+            return
+        }
+
+        if (parseClass == ParseClass.CREDIT_LIMIT_CHANGE) {
+            processCreditLimitChange(sms, institution, sender)
             return
         }
 
@@ -166,7 +178,10 @@ class SmsParsingPipeline @Inject constructor(
         }
 
         val transaction = writeGenericTransaction(sms, account, extraction, amount, direction.toEntityDirection())
-        if (transaction != null) cardPaymentMatcher.tryMatch(transaction)
+        if (transaction != null) {
+            cardPaymentMatcher.tryMatch(transaction)
+            maybeLinkBnplSettlement(transaction)
+        }
         maybeReanchorCreditCardOutstanding(account, extraction, extraction.occurredAt.value ?: sms.receivedAt)
         markTerminal(sms, institution, parseClass, ParseStatus.REVIEW)
     }
@@ -179,7 +194,7 @@ class SmsParsingPipeline @Inject constructor(
     private suspend fun processStatement(sms: RawSms, institution: String, sender: SenderRegistry) {
         val amounts = StatementExtractor.extractAmounts(sms.body)
         val extraction = amounts?.let { GenericExtractor.extract(sms.body, sms.receivedAt) }
-        val dueDate = extraction?.occurredAt?.value
+        val dueDate = extraction?.let { StatementExtractor.extractDueDate(sms.body, it.occurredAt.value, sms.receivedAt) }
         val account = extraction?.let { resolveAccount(sender, it) }
 
         if (amounts == null || dueDate == null || account == null) {
@@ -249,6 +264,23 @@ class SmsParsingPipeline @Inject constructor(
     }
 
     /**
+     * Task 2.6/docs/corpus-findings.md §10: axio's BNPL_LIMIT_CHANGE carries no transaction, only a
+     * new `Account.credit_limit` for its BNPL account - resolved the same way as any other
+     * axio message, purely via [SenderRegistry.accountId] (axio never carries a last4).
+     */
+    @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this pipeline
+    private suspend fun processCreditLimitChange(sms: RawSms, institution: String, sender: SenderRegistry) {
+        val newLimit = extractNewCreditLimit(sms.body)
+        val account = sender.accountId?.let { accountDao.getById(it) }
+        if (newLimit == null || account == null) {
+            markTerminal(sms, institution, ParseClass.CREDIT_LIMIT_CHANGE, ParseStatus.REVIEW)
+            return
+        }
+        accountDao.update(account.copy(creditLimit = newLimit, updatedAt = System.currentTimeMillis()))
+        markTerminal(sms, institution, ParseClass.CREDIT_LIMIT_CHANGE, ParseStatus.PARSED)
+    }
+
+    /**
      * Tier 1: tries [rule] against [sms]. Returns true iff the pattern matched — a match that
      * reconciliation flags as a [ReconciliationResult.Mismatch] still counts as "the rule matched,"
      * per docs/parser.md ("no match -> PENDING_REVIEW; do NOT fall to generic" is about the regex
@@ -291,6 +323,7 @@ class SmsParsingPipeline @Inject constructor(
             reanchorAccount(accountDao, balanceAnchorDao, account, reconciliation.newBalance, occurredAt)
         }
         cardPaymentMatcher.tryMatch(transaction)
+        maybeLinkBnplSettlement(transaction)
         maybeReanchorCreditCardOutstanding(account, extraction, occurredAt)
 
         val terminalStatus = if (status == TransactionStatus.CONFIRMED) ParseStatus.PARSED else ParseStatus.REVIEW
@@ -434,6 +467,34 @@ class SmsParsingPipeline @Inject constructor(
         reanchorAccount(accountDao, balanceAnchorDao, account, -outstanding, occurredAt)
     }
 
+    /**
+     * Task 2.6/docs/corpus-findings.md §10: axio settles its bill via a direct bank debit to
+     * `CAPITALFLOAT` with no confirmation SMS of its own from axio - unlike [CardPaymentMatcher],
+     * which pairs two messages, this is a one-sided [Transfer] (docs/schema.md's nullable
+     * `to_txn_id`) from the moment the bank-side debit is written.
+     */
+    @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this pipeline
+    private suspend fun maybeLinkBnplSettlement(transaction: Transaction) {
+        if (transaction.transferId != null) return
+        if (transaction.direction != EntityDirection.DEBIT) return
+        if (!isBnplSettlementMerchant(transaction.merchantRaw)) return
+
+        val now = System.currentTimeMillis()
+        val transfer = Transfer(
+            id = UUID.randomUUID().toString(),
+            fromTxnId = transaction.id,
+            toTxnId = null,
+            kind = TransferKind.CARD_PAYMENT,
+            detectedBy = DetectedBy.AUTO,
+            confidence = 1f,
+            createdAt = now,
+            updatedAt = now,
+            deletedAt = null,
+        )
+        transferDao.insert(transfer)
+        transactionDao.update(transaction.copy(transferId = transfer.id, isInternal = true, updatedAt = now))
+    }
+
     private suspend fun markTerminal(
         sms: RawSms,
         institution: String,
@@ -464,6 +525,7 @@ private fun ParseClass.toEntityParseClass(): EntityParseClass = when (this) {
     ParseClass.OTP -> EntityParseClass.OTP
     ParseClass.DECLINED -> EntityParseClass.DECLINED
     ParseClass.STATEMENT -> EntityParseClass.STATEMENT
+    ParseClass.CREDIT_LIMIT_CHANGE -> EntityParseClass.CREDIT_LIMIT_CHANGE
     ParseClass.SI_UPCOMING -> EntityParseClass.SI_UPCOMING
     ParseClass.SI_FAILED -> EntityParseClass.SI_FAILED
     ParseClass.AUTOPAY_SCHEDULED -> EntityParseClass.AUTOPAY_SCHEDULED

@@ -62,9 +62,9 @@ class AccountsViewModel @Inject constructor(
      * `current_balance`/`balance_as_of` cache (docs/schema.md) — there are no transactions yet to
      * have moved it since.
      *
-     * Task 2.5: [institution] links every already-seen sender for a WALLET account, which carries
-     * no `last4` for [SmsParsingPipeline.resolveAccount]'s usual match — the sender's own default
-     * account (docs/schema.md) is the only way a wallet message can ever resolve to an account.
+     * Task 2.5/2.6: [institution] links every already-seen sender for a WALLET or BNPL account,
+     * neither of which carries a `last4` for [SmsParsingPipeline.resolveAccount]'s usual match — the
+     * sender's own default account (docs/schema.md) is the only way such a message ever resolves.
      */
     @Suppress("LongParameterList") // one field per Account column the add-account form actually fills in
     fun createAccount(
