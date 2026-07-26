@@ -106,6 +106,9 @@ class GoldenCorpusTest {
         val e = GenericExtractor.extract(body, receivedAt)
         assertThat(e.amount.value).isEqualTo(36_709L)
         assertThat(e.direction.value).isEqualTo(Direction.CREDIT)
+        // Task 2.8: the merchant leading a REFUND message, not "ICICI Bank Credit Card XX6001"
+        // from "credited to" - matching against the original spend needs the real merchant.
+        assertThat(e.merchant.value).isEqualTo("AMAZON")
     }
 
     @Test

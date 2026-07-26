@@ -78,6 +78,7 @@ class SmsParsingPipeline @Inject constructor(
     private val cardPaymentMatcher: CardPaymentMatcher,
     private val cardStatementDao: CardStatementDao,
     private val transferDao: TransferDao,
+    private val refundMatcher: RefundMatcher,
 ) {
     suspend fun processUnprocessed() {
         rawSmsDao.getByStatus(ParseStatus.UNPROCESSED).forEach { processOne(it) }
@@ -184,6 +185,7 @@ class SmsParsingPipeline @Inject constructor(
             cardPaymentMatcher.tryMatch(transaction)
             maybeLinkBnplSettlement(transaction)
             maybeLinkAtmWithdrawal(transaction, sms)
+            refundMatcher.tryMatch(transaction, sms)
         }
         maybeReanchorCreditCardOutstanding(account, extraction, extraction.occurredAt.value ?: sms.receivedAt)
         markTerminal(sms, institution, parseClass, ParseStatus.REVIEW)
@@ -328,6 +330,7 @@ class SmsParsingPipeline @Inject constructor(
         cardPaymentMatcher.tryMatch(transaction)
         maybeLinkBnplSettlement(transaction)
         maybeLinkAtmWithdrawal(transaction, sms)
+        refundMatcher.tryMatch(transaction, sms)
         maybeReanchorCreditCardOutstanding(account, extraction, occurredAt)
 
         val terminalStatus = if (status == TransactionStatus.CONFIRMED) ParseStatus.PARSED else ParseStatus.REVIEW
@@ -368,9 +371,14 @@ class SmsParsingPipeline @Inject constructor(
      * visible only from the bank side - a one-sided transfer, same treatment as an already-confirmed
      * [com.amandhakar.ledgerly.database.entity.PayeeAllowlist] payee, just hardcoded rather than
      * user-confirmed since the merchant string is a specific, known brand.
+     *
+     * Task 2.8: a refund/reversal credit is marked internal unconditionally, whether or not
+     * [RefundMatcher] later finds a spend to link it to - "never as income" (tasks/phase-2.md) does
+     * not depend on a match existing.
      */
-    private suspend fun isInternalTransfer(merchant: String?): Boolean =
-        isWalletFundingMerchant(merchant) || isAllowlistedPayee(payeeAllowlistDao, merchant)
+    private suspend fun isInternalTransfer(merchant: String?, body: String, direction: EntityDirection): Boolean =
+        isWalletFundingMerchant(merchant) || isAllowlistedPayee(payeeAllowlistDao, merchant) ||
+            (direction == EntityDirection.CREDIT && classifyTransaction(body, ParserDirection.CREDIT) == TxnClass.REVERSAL)
 
     private suspend fun writeGenericTransaction(
         sms: RawSms,
@@ -393,7 +401,7 @@ class SmsParsingPipeline @Inject constructor(
             source = TransactionSource.SMS_GENERIC,
             status = TransactionStatus.PENDING_REVIEW,
             transferId = null,
-            isInternal = isInternalTransfer(extraction.merchant.value),
+            isInternal = isInternalTransfer(extraction.merchant.value, sms.body, direction),
             notes = null,
             createdAt = now,
             updatedAt = now,
@@ -417,7 +425,7 @@ class SmsParsingPipeline @Inject constructor(
         status: TransactionStatus,
     ): Transaction {
         val now = System.currentTimeMillis()
-        val isInternal = isInternalTransfer(merchant)
+        val isInternal = isInternalTransfer(merchant, sms.body, direction)
         if (existing != null) {
             val updated = existing.copy(
                 accountId = account.id,

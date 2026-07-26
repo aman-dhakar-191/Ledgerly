@@ -6,16 +6,13 @@ import com.amandhakar.ledgerly.database.LedgerlyDatabase
 import com.amandhakar.ledgerly.database.entity.Account
 import com.amandhakar.ledgerly.database.entity.AccountType
 import com.amandhakar.ledgerly.database.entity.ParseStatus
-import com.amandhakar.ledgerly.database.entity.ParserRule
-import com.amandhakar.ledgerly.database.entity.ParserTxnType
 import com.amandhakar.ledgerly.database.entity.RawSms
 import com.amandhakar.ledgerly.database.entity.SenderRegistry
 import com.amandhakar.ledgerly.database.entity.SenderType
-import com.amandhakar.ledgerly.parser.GenericExtractor
+import com.amandhakar.ledgerly.database.entity.TransactionStatus
+import com.amandhakar.ledgerly.database.entity.TransferKind
 import com.amandhakar.ledgerly.parser.computeDedupeHash
-import com.amandhakar.ledgerly.parser.generateRule
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -24,12 +21,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Task 2.7/docs/corpus-findings.md §6: ATM withdrawals through [SmsParsingPipeline] - split out
- * from [SmsParsingPipelineTest] to keep that class under detekt's `LargeClass` threshold, same as
- * [SmsParsingPipelineBnplTest].
+ * Task 2.8/docs/corpus-findings.md §6: refunds and reversals through [SmsParsingPipeline] - split
+ * out from [SmsParsingPipelineTest] to keep that class under detekt's `LargeClass` threshold, same
+ * as [SmsParsingPipelineBnplTest]/[SmsParsingPipelineAtmTest].
  */
 @RunWith(RobolectricTestRunner::class)
-class SmsParsingPipelineAtmTest {
+class SmsParsingPipelineRefundTest {
 
     private lateinit var db: LedgerlyDatabase
     private lateinit var pipeline: SmsParsingPipeline
@@ -64,7 +61,7 @@ class SmsParsingPipelineAtmTest {
         db.close()
     }
 
-    private suspend fun archive(sender: String, body: String, receivedAt: Long = 2_000L, id: String = "sms-$receivedAt") {
+    private suspend fun archive(sender: String, body: String, receivedAt: Long, id: String = "sms-$receivedAt") {
         db.rawSmsDao().insert(
             RawSms(
                 id = id,
@@ -115,107 +112,108 @@ class SmsParsingPipelineAtmTest {
         deletedAt = null,
     ).also { db.accountDao().insert(it) }
 
-    private suspend fun buildAtmRule(institution: String, sampleBody: String): ParserRule {
-        val extraction = GenericExtractor.extract(sampleBody, 0L)
-        val fields = mutableMapOf<String, IntRange>()
-        extraction.amount.span?.let { fields["amount"] = it }
-        extraction.occurredAt.span?.let { fields["occurredAt"] = it }
-        extraction.balanceAfter.span?.let { fields["balanceAfter"] = it }
-        val generated = generateRule(sampleBody, fields)
-        return ParserRule(
-            id = "rule-atm",
-            institution = institution,
-            pattern = generated.pattern,
-            fieldMap = encodeFieldMap(generated.fieldMap),
-            txnType = ParserTxnType.DEBIT,
-            priority = 0,
-            confidence = 1f,
-            active = true,
-            createdFromSmsId = "seed-sms",
-            matchCount = 0,
-            correctionCount = 0,
-            version = 1,
-            createdAt = 0,
-            updatedAt = 0,
-            deletedAt = null,
-        )
-    }
-
-    private val withdrawalBody = "ICICI Bank Acc XX924 debited Rs. 4,000.00 on 03-Jun-26 NFS*CASH WDL*. Avb Bal Rs. 32,327.01."
-
     @Test
-    fun `an ATM withdrawal is marked internal, not an expense`() = runTest {
+    fun `a partial refund nets against the matching prior spend via a linked transfer`() = runTest {
         ledgerSettingsStore.setLedgerStartDate(0L)
         trustSender("AD-ICICIT-S", "ICICIT")
-        account(last4 = "924")
-        archive("AD-ICICIT-S", withdrawalBody)
-
-        pipeline.processUnprocessed()
-
-        val bankTxn = db.transactionDao().getByRawSmsId("sms-2000")!!
-        assertThat(bankTxn.amount).isEqualTo(400_000L)
-        assertThat(bankTxn.isInternal).isTrue()
-        assertThat(bankTxn.transferId).isNotNull()
-    }
-
-    @Test
-    fun `an ATM withdrawal creates a same-amount credit on the auto-created cash account`() = runTest {
-        ledgerSettingsStore.setLedgerStartDate(0L)
-        trustSender("AD-ICICIT-S", "ICICIT")
-        account(last4 = "924")
-        archive("AD-ICICIT-S", withdrawalBody)
-
-        pipeline.processUnprocessed()
-
-        val cashAccount = db.accountDao().observeActive().first().single { it.type == AccountType.CASH }
-        assertThat(cashAccount.name).isEqualTo("Cash")
-        assertThat(cashAccount.currentBalance).isEqualTo(400_000L)
-
-        val bankTxn = db.transactionDao().getByRawSmsId("sms-2000")!!
-        val transfer = db.transferDao().getById(bankTxn.transferId!!)!!
-        val cashTxn = db.transactionDao().getById(transfer.toTxnId!!)!!
-        assertThat(cashTxn.accountId).isEqualTo(cashAccount.id)
-        assertThat(cashTxn.amount).isEqualTo(400_000L)
-        assertThat(cashTxn.isInternal).isTrue()
-    }
-
-    @Test
-    fun `a second withdrawal reuses the same cash account and accumulates its balance`() = runTest {
-        ledgerSettingsStore.setLedgerStartDate(0L)
-        trustSender("AD-ICICIT-S", "ICICIT")
-        account(last4 = "924")
-        archive("AD-ICICIT-S", withdrawalBody, receivedAt = 2_000L)
+        account(last4 = "6001")
         archive(
             "AD-ICICIT-S",
-            "ICICI Bank Acc XX924 debited Rs. 1,000.00 on 04-Jun-26 NFS*CASH WDL*. Avb Bal Rs. 31,327.01.",
-            receivedAt = 3_000L,
+            "INR 500.00 spent using ICICI Bank Card XX6001 on 04-Jan-26 on AMAZON. Avl Limit: INR 15,468.00.",
+            receivedAt = 1_000L,
+        )
+        archive(
+            "AD-ICICIT-S",
+            "AMAZON refund of Rs 367.09 credited to ICICI Bank Credit Card XX6001 on 13-JAN-26. " +
+                "Revised total due Rs 5,377.55, minimum due Rs .00",
+            receivedAt = 2_000L,
         )
 
         pipeline.processUnprocessed()
 
-        val cashAccounts = db.accountDao().observeActive().first().filter { it.type == AccountType.CASH }
-        assertThat(cashAccounts).hasSize(1)
-        assertThat(cashAccounts.single().currentBalance).isEqualTo(500_000L)
+        val spend = db.transactionDao().getByRawSmsId("sms-1000")!!
+        val refund = db.transactionDao().getByRawSmsId("sms-2000")!!
+        assertThat(refund.isInternal).isTrue()
+        assertThat(refund.transferId).isNotNull()
+        assertThat(spend.transferId).isEqualTo(refund.transferId)
+        // The spend stays a real expense (not internal) - only its effective amount is reduced,
+        // which is a derived/reporting concern (effectiveAmount), not a change to the stored amount.
+        assertThat(spend.isInternal).isFalse()
+        assertThat(spend.amount).isEqualTo(50_000L)
+
+        val transfer = db.transferDao().getById(spend.transferId!!)!!
+        assertThat(transfer.kind).isEqualTo(TransferKind.REFUND)
+        assertThat(transfer.fromTxnId).isEqualTo(spend.id)
+        assertThat(transfer.toTxnId).isEqualTo(refund.id)
     }
 
     @Test
-    fun `a rule-matched ATM withdrawal also links to the cash account`() = runTest {
+    fun `an unmatched refund is left as a standalone credit flagged for review, never income`() = runTest {
         ledgerSettingsStore.setLedgerStartDate(0L)
         trustSender("AD-ICICIT-S", "ICICIT")
-        account(last4 = "924")
-        val rule = buildAtmRule(
-            "ICICIT",
-            "ICICI Bank Acc XX924 debited Rs. 2,000.00 on 01-Jun-26 NFS*CASH WDL*. Avb Bal Rs. 30,000.00.",
+        account(last4 = "6001")
+        archive(
+            "AD-ICICIT-S",
+            "AMAZON refund of Rs 367.09 credited to ICICI Bank Credit Card XX6001 on 13-JAN-26. " +
+                "Revised total due Rs 5,377.55, minimum due Rs .00",
+            receivedAt = 2_000L,
         )
-        db.parserRuleDao().insert(rule)
-        archive("AD-ICICIT-S", withdrawalBody)
 
         pipeline.processUnprocessed()
 
-        val bankTxn = db.transactionDao().getByRawSmsId("sms-2000")!!
-        assertThat(bankTxn.isInternal).isTrue()
-        assertThat(bankTxn.transferId).isNotNull()
-        val cashAccount = db.accountDao().observeActive().first().single { it.type == AccountType.CASH }
-        assertThat(cashAccount.currentBalance).isEqualTo(400_000L)
+        val refund = db.transactionDao().getByRawSmsId("sms-2000")!!
+        assertThat(refund.isInternal).isTrue()
+        assertThat(refund.transferId).isNull()
+        assertThat(refund.status).isEqualTo(TransactionStatus.PENDING_REVIEW)
+    }
+
+    @Test
+    fun `a refund does not match a spend from a different merchant`() = runTest {
+        ledgerSettingsStore.setLedgerStartDate(0L)
+        trustSender("AD-ICICIT-S", "ICICIT")
+        account(last4 = "6001")
+        archive(
+            "AD-ICICIT-S",
+            "INR 500.00 spent using ICICI Bank Card XX6001 on 04-Jan-26 on BLINKIT. Avl Limit: INR 15,468.00.",
+            receivedAt = 1_000L,
+        )
+        archive(
+            "AD-ICICIT-S",
+            "AMAZON refund of Rs 367.09 credited to ICICI Bank Credit Card XX6001 on 13-JAN-26. " +
+                "Revised total due Rs 5,377.55, minimum due Rs .00",
+            receivedAt = 2_000L,
+        )
+
+        pipeline.processUnprocessed()
+
+        val refund = db.transactionDao().getByRawSmsId("sms-2000")!!
+        assertThat(refund.transferId).isNull()
+        assertThat(refund.isInternal).isTrue() // still never income, even unmatched
+    }
+
+    @Test
+    fun `a failed-payment reversal (equal debit and credit, same merchant) also nets via the same mechanism`() = runTest {
+        ledgerSettingsStore.setLedgerStartDate(0L)
+        trustSender("AD-ICICIT-S", "ICICIT")
+        account(last4 = "924")
+        archive(
+            "AD-ICICIT-S",
+            "ICICI Bank Acc XX924 debited Rs. 500.00 on 01-Jan-26 to FLIPKART. Avl Bal Rs. 10,000.00",
+            receivedAt = 1_000L,
+        )
+        archive(
+            "AD-ICICIT-S",
+            "ICICI Bank Acc XX924 credited Rs. 500.00 on 02-Jan-26 to FLIPKART. " +
+                "Payment reversed as it failed earlier. Avl Bal Rs. 10,500.00",
+            receivedAt = 2_000L,
+        )
+
+        pipeline.processUnprocessed()
+
+        val spend = db.transactionDao().getByRawSmsId("sms-1000")!!
+        val reversal = db.transactionDao().getByRawSmsId("sms-2000")!!
+        assertThat(reversal.isInternal).isTrue()
+        assertThat(reversal.transferId).isEqualTo(spend.transferId)
+        assertThat(spend.transferId).isNotNull()
     }
 }
