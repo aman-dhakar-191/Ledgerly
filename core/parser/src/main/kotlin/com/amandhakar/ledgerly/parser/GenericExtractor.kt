@@ -23,10 +23,18 @@ object GenericExtractor {
      * BLOCK ### to ##########" and axio's "To report misuse call ##########" - never a merchant,
      * but the "\bto\s+" merchant anchor below would otherwise capture one whole when the preceding
      * sentence ends with no space before it.
+     *
+     * ICICI's UPI-debit format actually reads "Call ##### for dispute. SMS BLOCK ### to
+     * ##########" - reversed word order from "to dispute call" above, and with its own separate
+     * "SMS BLOCK ... to <phone>" clause - so both the reversed phrasing and "SMS BLOCK" itself need
+     * their own entries, or the "\bto\s+" anchor greedily captures the trailing phone number as the
+     * merchant on every single one of these (a very high-volume real-world format).
      */
     private val DISCLAIMER_FOOTERS = listOf(
         Regex("(?i)to dispute call\\b.*"),
         Regex("(?i)to report misuse call\\b.*"),
+        Regex("(?i)call\\s+\\d+\\s+for\\s+dispute\\b.*"),
+        Regex("(?i)\\bsms\\s+block\\b.*"),
     )
     private val BALANCE_LABEL = Regex(
         """(?i)(avl\s*bal|avb\s*bal|avbl\s*bal|available\s*balance|updated\s*balance\s*is|""" +
@@ -37,8 +45,10 @@ object GenericExtractor {
         """(?i)avl\s*limit\.?\s*[:.]?\s*(?:rs\.?|inr|₹)?\s*(\d[\d,]*(?:\.\d{1,2})?|\.\d{1,2})"""
     )
 
-    private val DEBIT_VERBS = Regex("(?i)\\b(debited|withdrawn|spent|paid|sent)\\b")
-    private val CREDIT_VERBS = Regex("(?i)\\b(credited|received|deposited|refund)\\b")
+    // SBI's "has a debit/credit by <method> of Rs X" (NACH, transfer, Cheque) uses the noun form,
+    // not the verbs below - "debit"/"credit" alone, never "debited"/"credited".
+    private val DEBIT_VERBS = Regex("(?i)\\b(debited|withdrawn|spent|paid|sent)\\b|has a debit by\\b")
+    private val CREDIT_VERBS = Regex("(?i)\\b(credited|received|deposited|refund)\\b|has a credit by\\b")
     /**
      * docs/corpus-findings.md §10's wallet payment format ("Payment of Rs X using Apay Balance
      * successful ...") carries none of [DEBIT_VERBS]'s words - only checked when neither list
@@ -52,6 +62,20 @@ object GenericExtractor {
      * and carries none of [DEBIT_VERBS]'s words either.
      */
     private val BNPL_SPEND = Regex("(?i)\\bavailing\\b.*\\bpay later\\b")
+    /**
+     * A recurring Standing Instruction confirmation ("We have successfully processed payment of
+     * INR X to Merchant Y, as per Standing Instruction...") is always the cardholder's own spend
+     * (a DEBIT), but carries none of [DEBIT_VERBS]'s words - "processed" isn't one of them, and
+     * [PAYMENT_SUCCESSFUL] requires "successful" after "payment of", not "successfully" before it.
+     * Also [ParseClass]'s own `TRANSACTION_OVERRIDE` keys on this exact phrase.
+     */
+    private val SI_PAYMENT_PROCESSED = Regex("(?i)successfully processed(?:\\s+the)?\\s+payment\\s+of")
+    /**
+     * SBI's debit-card POS confirmation ("transaction number X for Rs.Y by SBI Debit Card XNNNN
+     * done at Z on DATE...") never uses "debited"/"spent" either - "done at" alone would be too
+     * broad to trust as a signal on its own, so this requires "debit card" earlier in the body too.
+     */
+    private val CARD_POS_DONE_AT = Regex("(?i)debit card\\b.*\\bdone at\\b")
 
     private val ACCOUNT_ANCHOR = Regex(
         """(?i)(?:a/c|acct|acc|account|card)s?\.?\s*(?:no\.?\s*)?([Xx*0-9]{3,})"""
@@ -60,6 +84,25 @@ object GenericExtractor {
     private val TRAILING_DIGITS = Regex("""\d+$""")
 
     private val MERCHANT_ANCHORS = listOf(
+        /**
+         * docs/corpus-findings.md's ACCT_DEBIT_VIN (`VIN*{merchant}`) and CARD_SPEND_LIMIT's card
+         * network merchant descriptor (`MSW*TRAVEL RETA`, `ANTHROPIC* CLAU`, `VSI*MICROSOFT`) - a
+         * documented format ("Yes" for carrying a merchant) that nonetheless extracted nothing:
+         * every other anchor's character class omits `*`, so none of them can even reach past it.
+         * Placed first since a literal `*` essentially never appears in any other format's merchant
+         * text, so this can never wrongly pre-empt a more specific anchor below.
+         *
+         * Excludes ICICI's own `InfoBIL*INFT*` (a bill-payment reference code, not a merchant -
+         * ACCT_DEBIT_BILL carries no `{merchant}` per docs) and `NFS*` (ATM withdrawal boilerplate,
+         * `ACCT_DEBIT_ATM` likewise carries none). Both are `CODE*CODE*...` shaped - two `*`s, not
+         * one - so the `(?<!\*)` lookbehind stops this from also matching the *second* segment
+         * ("INFT*FGR6") as if it were its own independent merchant-code match; `NFS*CASH WDL*` still
+         * has a *second* trailing `*` right before the terminating period, and unlike every other
+         * anchor's char class, this one deliberately excludes `.`/`,` - a real network merchant name
+         * never contains either, and including them would let the lazy capture jump straight over
+         * that second `*` and the period right after it, swallowing the rest of the message.
+         */
+        Regex("""(?i)(?<!\*)\b(?!InfoBIL\*)(?!NFS\*)([A-Za-z0-9]+\*\s?[A-Za-z0-9 &'_]+?)(?=\.|;|$)"""),
         Regex("""(?i)for UPI-[^-\s]+-([A-Za-z0-9 .,&'_]+?)(?=\.|;|$)"""),
         /**
          * Task 2.8/docs/corpus-findings.md §6's REFUND format ("AMAZON refund of Rs 367.09
@@ -69,6 +112,17 @@ object GenericExtractor {
          */
         Regex("""(?i)\b([A-Za-z0-9 .,&'_]+?)\s+refund\s+of\s+(?:rs\.?|inr|₹)"""),
         Regex("""(?i)\bmerchant\s+([A-Za-z0-9 .,&'_]+?)(?=,|\.|;|\s+as\s|\s+on\s|$)"""),
+        // Standing Instruction confirmation's other phrasing, without the "Merchant" keyword:
+        // "...processed the payment of INR 299.00 for Amazon, as per the Standing Instruction..."
+        Regex("""(?i)\bfor\s+([A-Za-z0-9 .,&'_]+?),\s+as\s+per\s+the\s+standing\s+instruction"""),
+        // SBI NEFT-credit's payer name ("...UTR 38113634161DC by CONSCENDO TECHNOLOGI, INFO: Salary
+        // Oct 24-SBI") and its UPI-credit's payer name ("...transfer from TARSON TOKBI Ref No
+        // 101947667588 -SBI") both need their own anchors: the generic "\bby\s+"/"\bfrom\s+" anchors
+        // below can't reach them because SBI's messages end in a bare "-SBI" suffix with no
+        // preceding period/comma, so the generic anchors' lazy capture (which is allowed to consume
+        // "." and "," itself) can never find a satisfiable stopping point and the whole match fails.
+        Regex("""(?i)\bby\s+([A-Za-z0-9 .,&'_]+?)(?=,\s*info\b)"""),
+        Regex("""(?i)\btransfer from\s+([A-Za-z0-9 .,&'_]+?)\s+ref\s*no\b"""),
         Regex("""(?i)\btrf to\s+([A-Za-z0-9 .,&'_]+?)(?=\s+refno|\.|;|$)"""),
         Regex("""(?i)\bon\s+\d{1,2}[-/]\w+[-/]\d{2,4}\s+on\s+([A-Za-z0-9 .,&'_]+?)(?=\.|;|$)"""),
         Regex("""(?i)\btowards\s+([A-Za-z0-9 .,&'_]+?)(?=\s+on\s|,|\.|;|$)"""),
@@ -78,9 +132,12 @@ object GenericExtractor {
         Regex("""(?i)([A-Za-z][A-Za-z .]+?)\s+credited\b"""),
     )
 
+    // SBI's "Ref No 101947667588" has a space between "Ref" and "No" - "\bref(?:no)?\b" alone only
+    // ever matches the bare word "Ref" there (the "no" branch requires zero-width adjacency), so
+    // the capture group grabs the literal word "No" instead of the actual reference number after it.
     private val REFERENCE_ANCHOR = Regex(
         """(?i)(?:upi[-:]|imps ref no|mandate id|txn\s*id|\brrn\b|\butr\b|reference number is|""" +
-            """\bref(?:no)?\b)\s*[:.]?\s*([A-Za-z0-9]+)"""
+            """\bref(?:\s*no)?\b)\s*[:.]?\s*([A-Za-z0-9]+)"""
     )
 
     private val DATE_PATTERN = Regex("""(\d{1,2})[-/]?([A-Za-z]{3}|\d{1,2})[-/]?(\d{2}|\d{4})""")
@@ -167,6 +224,8 @@ object GenericExtractor {
         ).minByOrNull { it.first.range.first }
             ?: PAYMENT_SUCCESSFUL.find(body)?.let { it to Direction.DEBIT }
             ?: BNPL_SPEND.find(body)?.let { it to Direction.DEBIT }
+            ?: SI_PAYMENT_PROCESSED.find(body)?.let { it to Direction.DEBIT }
+            ?: CARD_POS_DONE_AT.find(body)?.let { it to Direction.DEBIT }
             ?: return ExtractedField.empty()
         return ExtractedField(winner.second, 1f, winner.first.range)
     }
@@ -191,6 +250,11 @@ object GenericExtractor {
         val group = anchor.find(body)?.groups?.get(1) ?: return null
         if (footerStart != null && group.range.first >= footerStart) return null
         val cleaned = group.value.trim()
+        // A reference number, phone number or UPI ID can land in a merchant anchor's capture group
+        // (e.g. the "\bto\s+" anchor on a phone number in an unrecognised disclaimer footer) - a
+        // real merchant name always has at least one letter, so this is a cheap, general backstop
+        // independent of any one footer pattern being complete.
+        if (cleaned.none { it.isLetter() }) return null
         return cleaned.takeIf { it.isNotEmpty() }?.let { ExtractedField(it, 0.6f, group.range) }
     }
 
