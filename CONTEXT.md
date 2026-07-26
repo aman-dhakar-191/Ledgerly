@@ -189,6 +189,7 @@ All phases are written. **Work only the current phase.**
 | `tasks/phase-6.md` | Intelligence | needs baselines first |
 | `tasks/phase-7.md` | Liabilities | **ahead of data** |
 | `tasks/update-system.md` | update worker | ✔ complete |
+| `tasks/addon-trai-suffix.md` | retrofit | optional, slot into Phase 2 |
 
 Phases 0–2 were specified against a real 5,613-message SMS corpus. Phases 3, 4
 and 7 were written before the data they depend on exists, and each carries a
