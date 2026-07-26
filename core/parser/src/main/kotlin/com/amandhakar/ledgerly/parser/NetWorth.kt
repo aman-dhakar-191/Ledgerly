@@ -1,7 +1,13 @@
 package com.amandhakar.ledgerly.parser
 
-/** tasks/phase-2.md's own threshold isn't specified numerically; 30 days matches a monthly statement cadence. */
-private const val STALE_THRESHOLD_MILLIS = 30L * 24 * 60 * 60 * 1000L
+/**
+ * tasks/phase-2.md's own threshold isn't specified numerically; 30 days matches a monthly
+ * statement cadence. Shared with [com.amandhakar.ledgerly.ledger.CorrectnessDashboardCalculator]
+ * (Task 2.10) - "stale" means the same thing in both places, not two coincidentally-equal numbers.
+ */
+const val STALE_THRESHOLD_MILLIS = 30L * 24 * 60 * 60 * 1000L
+
+fun isStale(asOf: Long, now: Long): Boolean = now - asOf > STALE_THRESHOLD_MILLIS
 
 /**
  * One account's contribution to net worth - already signed correctly (docs/schema.md's
@@ -23,6 +29,6 @@ data class NetWorthResult(val total: Long, val staleAccountIds: Set<String>)
  */
 fun computeNetWorth(components: List<NetWorthComponent>, now: Long): NetWorthResult {
     val total = components.sumOf { it.amount }
-    val stale = components.filter { now - it.asOf > STALE_THRESHOLD_MILLIS }.map { it.accountId }.toSet()
+    val stale = components.filter { isStale(it.asOf, now) }.map { it.accountId }.toSet()
     return NetWorthResult(total, stale)
 }

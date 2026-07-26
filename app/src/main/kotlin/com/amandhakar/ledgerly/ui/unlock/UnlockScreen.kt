@@ -36,6 +36,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.amandhakar.ledgerly.ingest.LastProcessedStore
 import com.amandhakar.ledgerly.ui.accounts.AccountsScreen
+import com.amandhakar.ledgerly.ui.dashboard.CorrectnessDashboardScreen
 import com.amandhakar.ledgerly.ui.export.DataExportScreen
 import com.amandhakar.ledgerly.ui.initialization.InitializationScreen
 import com.amandhakar.ledgerly.ui.ledger.LedgerScreen
@@ -105,6 +106,7 @@ private fun HomeScreen(openUpdate: Boolean) {
     var showReviewInboxScreen by remember { mutableStateOf(false) }
     var showLedgerScreen by remember { mutableStateOf(false) }
     var showDataExportScreen by remember { mutableStateOf(false) }
+    var showCorrectnessDashboardScreen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     var lastProcessedAt by remember { mutableStateOf<Long?>(null) }
 
@@ -132,6 +134,8 @@ private fun HomeScreen(openUpdate: Boolean) {
         LedgerScreen(onBack = { showLedgerScreen = false })
     } else if (showDataExportScreen) {
         DataExportScreen(onBack = { showDataExportScreen = false })
+    } else if (showCorrectnessDashboardScreen) {
+        CorrectnessDashboardScreen(onBack = { showCorrectnessDashboardScreen = false })
     } else {
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -146,6 +150,7 @@ private fun HomeScreen(openUpdate: Boolean) {
             Button(onClick = { showInitializationScreen = true }) { Text("Set up ledger") }
             Button(onClick = { showSenderClassificationScreen = true }) { Text("Classify senders") }
             Button(onClick = { showReviewInboxScreen = true }) { Text("Review inbox") }
+            Button(onClick = { showCorrectnessDashboardScreen = true }) { Text("Correctness dashboard") }
             Text(
                 "Last SMS processed: ${formatLastProcessed(lastProcessedAt)}",
                 style = MaterialTheme.typography.bodySmall,
