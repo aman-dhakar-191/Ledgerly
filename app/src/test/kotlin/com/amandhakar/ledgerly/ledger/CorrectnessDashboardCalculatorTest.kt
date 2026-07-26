@@ -149,6 +149,10 @@ class CorrectnessDashboardCalculatorTest {
 
     @Test
     fun `only a transfer missing its second leg counts as unmatched`() = runTest {
+        accountWithAnchor("acct-1")
+        transaction("txn-a", "acct-1", TransactionStatus.CONFIRMED, TransactionSource.SMS_GENERIC)
+        transaction("txn-b", "acct-1", TransactionStatus.CONFIRMED, TransactionSource.SMS_GENERIC)
+        transaction("txn-c", "acct-1", TransactionStatus.CONFIRMED, TransactionSource.SMS_GENERIC)
         val now2 = System.currentTimeMillis()
         db.transferDao().insert(
             Transfer(
