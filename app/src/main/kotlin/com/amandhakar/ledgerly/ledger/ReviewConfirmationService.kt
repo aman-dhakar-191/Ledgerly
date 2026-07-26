@@ -168,15 +168,35 @@ class ReviewConfirmationService @Inject constructor(
 
     /** Only fields the user left as-extracted are trustworthy enough to anchor a rule on. */
     private fun confirmedSpans(extraction: GenericExtraction, correction: ReviewCorrection): Map<String, IntRange> {
-        val fields = mutableMapOf<String, IntRange>()
-        if (extraction.amount.value == correction.amount) extraction.amount.span?.let { fields["amount"] = it }
-        if (extraction.merchant.value == correction.merchant) extraction.merchant.span?.let { fields["merchant"] = it }
-        if (extraction.occurredAt.value == correction.occurredAt) extraction.occurredAt.span?.let { fields["occurredAt"] = it }
+        val candidates = mutableListOf<Pair<String, IntRange>>()
+        if (extraction.amount.value == correction.amount) extraction.amount.span?.let { candidates += "amount" to it }
+        if (extraction.merchant.value == correction.merchant) extraction.merchant.span?.let { candidates += "merchant" to it }
+        if (extraction.occurredAt.value == correction.occurredAt) extraction.occurredAt.span?.let { candidates += "occurredAt" to it }
         if (extraction.balanceAfter.value == correction.balanceAfter) {
-            extraction.balanceAfter.span?.let { fields["balanceAfter"] = it }
+            extraction.balanceAfter.span?.let { candidates += "balanceAfter" to it }
         }
-        return fields
+        return nonOverlapping(candidates)
     }
+}
+
+/**
+ * [generateRule] requires non-overlapping spans, but [GenericExtractor]'s fields are each found by
+ * an independent regex search over the whole body (docs/parser.md) - nothing stops two of them
+ * matching over the same text for an unusual message shape (observed in production: a `StringIndex
+ * OutOfBoundsException` crash from [generateRule] itself, on a real user's confirmation). Rather
+ * than crash, keep spans greedily by earliest start and drop any later one that overlaps what's
+ * already kept - one less-specific rule beats none.
+ */
+private fun nonOverlapping(candidates: List<Pair<String, IntRange>>): Map<String, IntRange> {
+    val kept = mutableListOf<IntRange>()
+    val result = mutableMapOf<String, IntRange>()
+    candidates.sortedBy { it.second.first }.forEach { (name, span) ->
+        if (kept.none { it.first <= span.last && span.first <= it.last }) {
+            kept += span
+            result[name] = span
+        }
+    }
+    return result
 }
 
 private fun encodeExpectation(correction: ReviewCorrection): String {
