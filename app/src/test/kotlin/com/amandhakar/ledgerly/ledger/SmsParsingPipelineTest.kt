@@ -62,6 +62,7 @@ class SmsParsingPipelineTest {
             CardPaymentMatcher(db.transactionDao(), db.rawSmsDao(), db.accountDao(), db.transferDao()),
             db.cardStatementDao(),
             db.transferDao(),
+            RefundMatcher(db.transactionDao(), db.transferDao()),
         )
     }
 

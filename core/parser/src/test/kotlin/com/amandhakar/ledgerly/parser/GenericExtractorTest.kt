@@ -137,4 +137,14 @@ class GenericExtractorTest {
         val result = GenericExtractor.extract("", someReceivedAt)
         assertThat(result.amount.value).isNull()
     }
+
+    @Test
+    fun `a refund message's merchant is the word leading it, not the card it lands on`() {
+        // Task 2.8: without the dedicated anchor, "\bto\s+" would win instead and capture
+        // "ICICI Bank Credit Card XX6001" from "credited to ICICI...".
+        val body = "AMAZON refund of Rs 367.09 credited to ICICI Bank Credit Card XX6001 on " +
+            "13-JAN-26. Revised total due Rs 5,377.55, minimum due Rs .00"
+        val result = GenericExtractor.extract(body, someReceivedAt)
+        assertThat(result.merchant.value).isEqualTo("AMAZON")
+    }
 }

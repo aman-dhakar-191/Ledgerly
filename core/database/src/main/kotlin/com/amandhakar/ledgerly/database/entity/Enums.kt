@@ -40,6 +40,6 @@ enum class AuditReason { USER_EDIT, RULE_BACKFILL, RECONCILE_FIX }
 enum class BalanceAnchorSource { OPENING, USER_CORRECTION, SMS_DERIVED }
 
 /** docs/schema.md's Transfer entity (Phase 2). */
-enum class TransferKind { ACCOUNT_TO_ACCOUNT, CARD_PAYMENT, INVESTMENT_FUNDING, ATM_WITHDRAWAL }
+enum class TransferKind { ACCOUNT_TO_ACCOUNT, CARD_PAYMENT, INVESTMENT_FUNDING, ATM_WITHDRAWAL, REFUND }
 
 enum class DetectedBy { AUTO, MANUAL }

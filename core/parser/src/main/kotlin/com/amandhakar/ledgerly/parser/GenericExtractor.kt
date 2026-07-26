@@ -61,6 +61,13 @@ object GenericExtractor {
 
     private val MERCHANT_ANCHORS = listOf(
         Regex("""(?i)for UPI-[^-\s]+-([A-Za-z0-9 .,&'_]+?)(?=\.|;|$)"""),
+        /**
+         * Task 2.8/docs/corpus-findings.md §6's REFUND format ("AMAZON refund of Rs 367.09
+         * credited to ICICI Bank Credit Card XX6001...") - must come before the generic `\bto\s+`
+         * anchor below, which would otherwise capture "ICICI Bank Credit Card XX6001" (from
+         * "credited to ICICI...") instead of the actual merchant leading the message.
+         */
+        Regex("""(?i)\b([A-Za-z0-9 .,&'_]+?)\s+refund\s+of\s+(?:rs\.?|inr|₹)"""),
         Regex("""(?i)\bmerchant\s+([A-Za-z0-9 .,&'_]+?)(?=,|\.|;|\s+as\s|\s+on\s|$)"""),
         Regex("""(?i)\btrf to\s+([A-Za-z0-9 .,&'_]+?)(?=\s+refno|\.|;|$)"""),
         Regex("""(?i)\bon\s+\d{1,2}[-/]\w+[-/]\d{2,4}\s+on\s+([A-Za-z0-9 .,&'_]+?)(?=\.|;|$)"""),
