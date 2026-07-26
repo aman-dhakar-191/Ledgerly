@@ -12,6 +12,7 @@ import com.amandhakar.ledgerly.database.entity.RawSms
 import com.amandhakar.ledgerly.database.entity.Transaction
 import com.amandhakar.ledgerly.database.entity.TransactionSource
 import com.amandhakar.ledgerly.database.entity.TransactionStatus
+import com.amandhakar.ledgerly.parser.GenericExtractor
 import com.amandhakar.ledgerly.parser.computeDedupeHash
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.flow.first
@@ -284,5 +285,97 @@ class ReviewConfirmationServiceTest {
         assertThat(db.transactionDao().getById("txn-manual")?.status).isEqualTo(TransactionStatus.CONFIRMED)
         assertThat(db.parserRuleDao().observeAll().first()).isEmpty()
         assertThat(db.goldenTestDao().observeAll().first()).isEmpty()
+    }
+
+    /**
+     * A real production crash (0.1.1): `GeneratedRule.kt`'s `generateRule` assumes confirmed field
+     * spans never overlap, but [GenericExtractor]'s fields are each found by an independent regex
+     * search - nothing stops one from landing entirely inside another. Here the merchant anchor
+     * ("at PAYTM15JUN26PVT") swallows a valid, unseparated date ("15JUN26") that [GenericExtractor]
+     * also picks up on its own as `occurredAt`, so the merchant span strictly contains it.
+     */
+    @Test
+    fun `a merchant span that contains the occurredAt span does not crash rule generation`() = runTest {
+        val overlappingBody = "ICICI Bank Acc XX924 debited Rs. 500.00 at PAYTM15JUN26PVT. Avl Bal Rs. 1,000.00"
+        db.accountDao().insert(
+            Account(
+                id = "acct-2",
+                name = "Test",
+                type = AccountType.SAVINGS,
+                last4 = "924",
+                currency = "INR",
+                currentBalance = 0,
+                balanceAsOf = 0,
+                creditLimit = null,
+                statementDay = null,
+                dueDay = null,
+                archived = false,
+                createdAt = 0,
+                updatedAt = 0,
+                deletedAt = null,
+            ),
+        )
+        db.rawSmsDao().insert(
+            RawSms(
+                id = "sms-2",
+                sender = "AD-ICICIT-S",
+                body = overlappingBody,
+                receivedAt = receivedAt,
+                subscriptionId = null,
+                dedupeHash = computeDedupeHash("AD-ICICIT-S", receivedAt, overlappingBody),
+                institution = "ICICIT",
+                parseStatus = ParseStatus.REVIEW,
+                parseClass = ParseClass.TRANSACTION,
+                matchedRuleId = null,
+                createdAt = receivedAt,
+                updatedAt = receivedAt,
+                deletedAt = null,
+            ),
+        )
+        val extraction = GenericExtractor.extract(overlappingBody, receivedAt)
+        val merchantSpan = extraction.merchant.span!!
+        val occurredAtSpan = extraction.occurredAt.span!!
+        // Confirms the fixture actually reproduces the overlap, not just that nothing crashed.
+        assertThat(occurredAtSpan.first).isAtLeast(merchantSpan.first)
+        assertThat(occurredAtSpan.last).isAtMost(merchantSpan.last)
+
+        val transaction = Transaction(
+            id = "txn-overlap",
+            accountId = "acct-2",
+            amount = extraction.amount.value!!,
+            direction = Direction.DEBIT,
+            occurredAt = extraction.occurredAt.value!!,
+            merchantRaw = extraction.merchant.value,
+            balanceAfter = extraction.balanceAfter.value,
+            rawSmsId = "sms-2",
+            source = TransactionSource.SMS_GENERIC,
+            status = TransactionStatus.PENDING_REVIEW,
+            transferId = null,
+            isInternal = false,
+            notes = null,
+            createdAt = receivedAt,
+            updatedAt = receivedAt,
+            deletedAt = null,
+        )
+        db.transactionDao().insert(transaction)
+        val correction = ReviewCorrection(
+            amount = extraction.amount.value!!,
+            direction = Direction.DEBIT,
+            merchant = extraction.merchant.value,
+            occurredAt = extraction.occurredAt.value!!,
+            balanceAfter = extraction.balanceAfter.value,
+        )
+
+        service.confirm(transaction, correction) // must not throw StringIndexOutOfBoundsException
+
+        assertThat(db.transactionDao().getById("txn-overlap")?.status).isEqualTo(TransactionStatus.CONFIRMED)
+        val rule = db.parserRuleDao().observeAll().first().single()
+        // occurredAt lost out to merchant (kept by earliest start); amount/merchant/balanceAfter
+        // don't overlap each other, so the rule still anchors on all three.
+        val fieldMap = decodeFieldMap(rule.fieldMap)
+        assertThat(fieldMap).doesNotContainKey("occurredAt")
+        assertThat(fieldMap).containsKey("amount")
+        assertThat(fieldMap).containsKey("merchant")
+        assertThat(fieldMap).containsKey("balanceAfter")
     }
 }
