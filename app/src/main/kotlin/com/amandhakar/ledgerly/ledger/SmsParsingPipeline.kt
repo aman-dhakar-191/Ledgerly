@@ -33,8 +33,10 @@ import com.amandhakar.ledgerly.parser.ParseClass
 import com.amandhakar.ledgerly.parser.ReconciliationResult
 import com.amandhakar.ledgerly.parser.StatementAmounts
 import com.amandhakar.ledgerly.parser.StatementExtractor
+import com.amandhakar.ledgerly.parser.TxnClass
 import com.amandhakar.ledgerly.parser.capturedFields
 import com.amandhakar.ledgerly.parser.classify
+import com.amandhakar.ledgerly.parser.classifyTransaction
 import com.amandhakar.ledgerly.parser.extractNewCreditLimit
 import com.amandhakar.ledgerly.parser.isBnplSettlementMerchant
 import com.amandhakar.ledgerly.parser.isPersonalNumber
@@ -181,6 +183,7 @@ class SmsParsingPipeline @Inject constructor(
         if (transaction != null) {
             cardPaymentMatcher.tryMatch(transaction)
             maybeLinkBnplSettlement(transaction)
+            maybeLinkAtmWithdrawal(transaction, sms)
         }
         maybeReanchorCreditCardOutstanding(account, extraction, extraction.occurredAt.value ?: sms.receivedAt)
         markTerminal(sms, institution, parseClass, ParseStatus.REVIEW)
@@ -324,6 +327,7 @@ class SmsParsingPipeline @Inject constructor(
         }
         cardPaymentMatcher.tryMatch(transaction)
         maybeLinkBnplSettlement(transaction)
+        maybeLinkAtmWithdrawal(transaction, sms)
         maybeReanchorCreditCardOutstanding(account, extraction, occurredAt)
 
         val terminalStatus = if (status == TransactionStatus.CONFIRMED) ParseStatus.PARSED else ParseStatus.REVIEW
@@ -493,6 +497,60 @@ class SmsParsingPipeline @Inject constructor(
         )
         transferDao.insert(transfer)
         transactionDao.update(transaction.copy(transferId = transfer.id, isInternal = true, updatedAt = now))
+    }
+
+    /**
+     * Task 2.7/docs/corpus-findings.md §6: an ATM withdrawal moves money from the bank into cash,
+     * it does not spend it - the bank-side debit links to a same-amount credit on the single
+     * system CASH account (`ensureCashAccount`, "Cash - unallocated") via a two-sided [Transfer],
+     * the same shape as [CardPaymentMatcher]'s card-payment pairing, just synthesized from one
+     * message instead of matched from two, since no second SMS confirms the cash side.
+     */
+    @Suppress("ReturnCount") // guard-clause style is clearer than nesting for this pipeline
+    private suspend fun maybeLinkAtmWithdrawal(transaction: Transaction, sms: RawSms) {
+        if (transaction.transferId != null) return
+        if (transaction.direction != EntityDirection.DEBIT) return
+        if (classifyTransaction(sms.body, ParserDirection.DEBIT) != TxnClass.ATM_WITHDRAWAL) return
+        val bankAccount = accountDao.getById(transaction.accountId) ?: return
+
+        val now = System.currentTimeMillis()
+        val cashAccount = ensureCashAccount(accountDao, bankAccount.currency, now)
+        val cashTransaction = Transaction(
+            id = UUID.randomUUID().toString(),
+            accountId = cashAccount.id,
+            amount = transaction.amount,
+            direction = EntityDirection.CREDIT,
+            occurredAt = transaction.occurredAt,
+            merchantRaw = null,
+            balanceAfter = null,
+            rawSmsId = transaction.rawSmsId,
+            source = transaction.source,
+            status = transaction.status,
+            transferId = null,
+            isInternal = true,
+            notes = null,
+            createdAt = now,
+            updatedAt = now,
+            deletedAt = null,
+        )
+        transactionDao.insert(cashTransaction)
+
+        val transfer = Transfer(
+            id = UUID.randomUUID().toString(),
+            fromTxnId = transaction.id,
+            toTxnId = cashTransaction.id,
+            kind = TransferKind.ATM_WITHDRAWAL,
+            detectedBy = DetectedBy.AUTO,
+            confidence = 1f,
+            createdAt = now,
+            updatedAt = now,
+            deletedAt = null,
+        )
+        transferDao.insert(transfer)
+        transactionDao.update(transaction.copy(transferId = transfer.id, isInternal = true, updatedAt = now))
+        transactionDao.update(cashTransaction.copy(transferId = transfer.id, updatedAt = now))
+
+        creditCashAccount(accountDao, balanceAnchorDao, cashAccount, transaction.amount, transaction.occurredAt)
     }
 
     private suspend fun markTerminal(
